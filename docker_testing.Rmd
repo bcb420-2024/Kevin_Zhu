@@ -1,0 +1,30 @@
+# set seed for reproducibility
+set.seed(123)
+
+# create a 5x10 matrix of random integers
+data_matrix <- matrix(sample(1:100, 5 * 10, replace = TRUE), nrow = 5)
+
+# define column names
+colnames(data_matrix) <- c("cond1", "cond2", "cond3", "cond4", "cond5", "ctrl1", "ctrl2", "ctrl3", "ctrl4", "ctrl5")
+
+# define row names
+rownames(data_matrix) <- paste("gene", 1:5, sep = "")
+
+# display matrix
+print("Original Data Matrix:")
+print(data_matrix)
+
+# compute fold change for each gene
+compute_fold_change <- function(row) {
+  ctrl_mean <- mean(row[6:10])
+  cond_mean <- mean(row[1:5])
+  fold_change <- cond_mean / ctrl_mean
+  return(fold_change)
+}
+
+# apply function to each row of the matrix
+fold_changes <- apply(data_matrix, 1, compute_fold_change)
+
+# display computed fold changes
+print("\nFold Changes:")
+print(fold_changes)
