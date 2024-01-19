@@ -1,3 +1,16 @@
+---
+title: "Docker Testing: Gene Fold Change Calculation"
+output: html_document
+date: "2024-01-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Calculating fold-change
+
+```{r}
 # set seed for reproducibility
 set.seed(123)
 
@@ -18,7 +31,7 @@ print(data_matrix)
 compute_fold_change <- function(row) {
   ctrl_mean <- mean(row[6:10])
   cond_mean <- mean(row[1:5])
-  fold_change <- cond_mean / ctrl_mean
+  fold_change <- log2(cond_mean / ctrl_mean)
   return(fold_change)
 }
 
@@ -28,3 +41,4 @@ fold_changes <- apply(data_matrix, 1, compute_fold_change)
 # display computed fold changes
 print("\nFold Changes:")
 print(fold_changes)
+```
