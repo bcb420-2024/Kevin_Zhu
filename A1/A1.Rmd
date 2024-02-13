@@ -289,6 +289,8 @@ apply a normalization to see what it looks like. This is confirmed by the
 density plot, as shown below:
 
 ```{r eval=TRUE}
+# note that this plotting code is based on Lecture 5 notes
+
 counts_density <- apply(data2plot, 2, density)
 
 # calculate the limits across all the samples
@@ -346,6 +348,8 @@ abline(h = median(apply(data2plot_after, 2, median)),
 ```
 
 ```{r eval=TRUE}
+# note that this plotting code is based on Lecture 5 notes
+
 counts_density <- apply(data2plot_after, 2, density)
 
 # Calculate the limits across all the samples
@@ -385,8 +389,10 @@ distributed, as well as how seeing how samples differ across treatments.
 
 ### MDS Plotting
 
-We can visuzlize the sample separation using a multidimenstional scaling plot
-post normalization.
+We can visualize the sample separation using a multidimenstional scaling plot
+post normalization. We can see from the MDS plot below that there does seem to 
+be some separation between the control samples and the ones with the 
+γ-secretase inhibitors.
 ```{r eval=TRUE}
 # plotMDS(d, labels=groups,
 #   col = c("darkgreen","blue", "red")[factor(samples_type[, "treatment"])]
@@ -402,16 +408,30 @@ pch=c(1), col= c("darkgreen","blue", "red"),
 cex = 0.7, inset=c(0,-0.23))
 ```
 
-
-We can see from the MDS plot above that there does seem to be some separation 
-between the control samples and the ones with the γ-secretase inhibitors. 
+### Dispersion Plotting
+The dispersion analysis is performed below. The plot seems to indicate that the
+dispersion is roughly constant across the genes. This may suggest consistent 
+technical variability.
 
 ```{r eval=TRUE}
-# model_design <- model.matrix(~samples_type[, "treatment"]+
-#                                samples_type[, "cell line"])
-# d <- estimateDisp(d, model_design)
-# plotBCV(d, col.tagwise = "black", col.common = "red", )
+model_design <- model.matrix(~samples_type[, "treatment"]
+                               # + samples_type[, "cell line"]
+                             )
+d <- estimateDisp(d, model_design)
+plotBCV(d, col.tagwise = "black", col.common = "red", )
 ```
+
+### Mean Variance Plotting
+As shown below, it seems like the data follows a negative binomial distrbution, 
+with the points following relatively closely the blue line. 
+
+```{r eval=TRUE}
+plotMeanVar(d, show.raw.vars = TRUE, show.tagwise.vars = TRUE, NBline = TRUE, 
+            show.ave.raw.vars = TRUE, show.binned.common.disp.vars = FALSE, 
+            ylim = c(1,1e10))
+
+```
+
 ### Writing Out the Data
 ```{r eval=TRUE}
 write.table(normalized_counts, 
