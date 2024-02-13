@@ -255,8 +255,10 @@ Now that we have gene-level counts, we can start filtering out the low-count
 genes
 ```{r eval=TRUE}
 # there are 6 samples for each condition, removing low counts
-keep <- rowSums( edgeR::cpm(subset(hgnc_combined_table, select = 
-                                     -c(external_gene_name))) > 1 ) >= 6
+min_samples <- 6
+keep <- rowSums( edgeR::cpm(subset(hgnc_combined_table, 
+                                   select = -c(external_gene_name)))
+                 > 1 ) >= min_samples
 filtered_table <- hgnc_combined_table[keep, ]
 dim(filtered_table) 
 ```
@@ -268,8 +270,9 @@ Before this, we must look at how our data looks pre-normalized.
 ### Initial Plotting
 ```{r warning=FALSE}
 # boxplot for pre-normalized dataset
+# we do add a pseudocount of 0.25 to ensure negative log values do not explode
 data2plot <- log2(cpm(subset(filtered_table, select =
-                               -c(external_gene_name))))
+                               -c(external_gene_name)))+0.25)
 
 boxplot(data2plot,xlab = "Samples", ylab = "log2 CPM",
  las = 2, cex = 0.5, cex.lab = 0.5,
@@ -331,7 +334,8 @@ rownames(normalized_counts) <- filtered_table$external_gene_name
 nrow(normalized_counts)
 ```
 ```{r warning=FALSE}
-data2plot_after <- log2(normalized_counts)
+# we do add a pseudocount of 0.25 to ensure negative log values do not explode
+data2plot_after <- log2(normalized_counts + 0.25)
 boxplot(data2plot_after, ylab = "log2 CPM",
  las = 2, cex = 0.5, cex.lab = 0.5,
  cex.axis = 0.5, main = "Normalized RNASeq Samples")
@@ -342,26 +346,32 @@ abline(h = median(apply(data2plot_after, 2, median)),
 
 ```{r warning=FALSE}
 counts_density <- apply(data2plot_after, 2, density)
-#calculate the limits across all the samples
-xlim <- 0; ylim <- 0
+
+# Calculate the limits across all the samples
+xlim <- 0
+ylim <- 0
 for (i in 1:length(counts_density)) {
-  xlim <- range(c(xlim, counts_density[[i]]$x));
+  xlim <- range(c(xlim, counts_density[[i]]$x))
   ylim <- range(c(ylim, counts_density[[i]]$y))
-  }
+}
+
 cols <- rainbow(length(counts_density))
 ltys <- rep(1, length(counts_density))
-#plot the first density plot to initialize the plot
+
+# Plot the first density plot to initialize the plot
 plot(counts_density[[1]], xlim=xlim, ylim=ylim, type="n",
-ylab="Smoothing density of log2-CPM",
-main="", cex.lab = 0.85)
-#plot each line
+     ylab="Smoothing density of log2-CPM", main="", cex.lab = 0.85)
+
+# Plot each line
 for (i in 1:length(counts_density))
-lines(counts_density[[i]], col=cols[i], lty=ltys[i])
-#create legend
+  lines(counts_density[[i]], col=cols[i], lty=ltys[i])
+
+# Create legend
 legend("topright", colnames(data2plot),
-col=cols, lty=ltys, cex=0.75,
-border ="blue", text.col = "green4",
-merge = TRUE, bg = "gray90")
+       col=cols, lty=ltys, cex=0.75,
+       border ="blue", text.col = "green4",
+       merge = TRUE, bg = "gray90")
+
 ```
 
 We can see that these results are essentially identical to the plot we made 
@@ -369,8 +379,105 @@ earlier. This likely means that the data had already been normalized. It was
 good to check though.
 
 ## Step 4: Initial Analysis and Discussion
+In this step, we can perform further analyses to see how the data is 
+distributed, as well as how seeing how samples differ across treatments.
+
+### MDS Plotting
+
+We can visuzlize the sample separation using a multidimenstional scaling plot
+post normalization.
 ```{r warning=FALSE}
-plotMDS(d, labels=groups,
-  # col = c("darkgreen","blue")[factor(samples$gender)]
+# plotMDS(d, labels=groups,
+#   col = c("darkgreen","blue", "red")[factor(samples_type[, "treatment"])]
+# )
+
+plotMDS(d, labels=NULL,pch=1,
+  col = c("darkgreen","blue", "red")[factor(samples_type[, "treatment"])]
 )
+par(xpd = T)
+legend("topright",
+legend=levels(factor(samples_type[, "treatment"] )),
+pch=c(1), col= c("darkgreen","blue", "red"),
+cex = 0.7, inset=c(0,-0.23))
 ```
+
+
+We can see from the MDS plot above that there does seem to be some separation 
+between the control samples and the ones with the γ-secretase inhibitors. 
+
+```{r warning=FALSE}
+# model_design <- model.matrix(~samples_type[, "treatment"]+
+#                                samples_type[, "cell line"])
+# d <- estimateDisp(d, model_design)
+# plotBCV(d, col.tagwise = "black", col.common = "red", )
+```
+### Writing Out the Data
+```{r warning=FALSE}
+write.table(normalized_counts, 
+            file.path(
+              getwd(),
+              dataset_geo_id, 
+              paste(dataset_geo_id, 
+                    "normalized_filtered_RSEM_counts.txt",sep="_")
+              ),
+            quote = FALSE,sep="\t",row.names = TRUE)
+```
+
+### Questions and Answers
+**What are the control and test conditions of the dataset?**\
+The RNA-seq experiment was conducted over siz biological replicates of induced
+neuronal cells. Tehre were three treatments: control (0.6% DMSO), DAPT(40 uM), 
+and LY411575(2.5 uM). The latter two treatments were used to chronically inhibit
+γ-secretase.
+
+**Why is the dataset of interest to you?**\
+Alzheimer's disease (AD); it is the most common cause of dementia but there 
+haven't been any successful therapeutic interventions for this issue. More 
+recently, there have been interesting observations regarding the relationship
+between dysfunction in lipid metabolism and neuroinflammation in AD. This 
+dataset and its associate paper aims to elucidate this relationship by 
+investigating the direct causal relationship between γ-secretase, cholesterol, 
+and synapses.
+
+**Were there expression values that were not unique for specific genes?**\
+This dataset was originally published at the transcript level using ensembl 
+transcript IDs. After mapping these transcripts to their corresponding HUGO
+symbols, there were many duplicates, as multiple transcripts can be mapped to 
+the same gene. In order fix this issue, I simply summed over the counts of 
+transcripts that mapped to the same gene. 
+
+**Were there expression values that couldn't be mapped to HUGO symbols?**\
+There were a few transcripts in the original dataset that likely had outdated 
+ensembl IDs, as `biomaRt` was unable to locate their HUGO symbol. After the 
+conversion step from transcript to gene-level expression, 3300 transcripts were 
+omitted from the dataset. 
+
+**How many outliers were removed?**\
+I did not remove any sample outliers. As shown by the density and box plots, it
+seems as though the dataset had already been normalized, as there were no
+indication of outliers. Hence, no removal of data was performed in this step. 
+The only data that was removed were for low counts; genes were considered 
+expressed when it had >1 count in at least `r min_samples` samples.
+
+**How did you handle replicates?**\
+The dataset contained six biological replicates, each with three treatments.
+Thus, the final output data table has 18 columns (six biological replicates, 
+each with three treatments). Note that when removing genes with low sample 
+counts, I removed entire rows to keep the data well-organized.
+
+**What is the final coverage of your dataset?**\
+The final dataset coverage is `r dim(normalized_counts)[1]` genes. There are 
+18 columns (six biological replicates, each with three treatments).
+
+## References
+library(GEOquery)
+library(knitr)
+library(edgeR)
+library(biomaRt)
+library(dplyr)
+library(purrr)
+ensembl website?
+paper citation?
+
+
+
