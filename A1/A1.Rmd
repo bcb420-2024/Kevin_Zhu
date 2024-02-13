@@ -268,7 +268,7 @@ Now that we have cleaned our data, we can now proceed to the normalization step.
 Before this, we must look at how our data looks pre-normalized. 
 
 ### Initial Plotting
-```{r warning=FALSE}
+```{r eval=TRUE}
 # boxplot for pre-normalized dataset
 # we do add a pseudocount of 0.25 to ensure negative log values do not explode
 data2plot <- log2(cpm(subset(filtered_table, select =
@@ -288,7 +288,7 @@ with medians and quartiles at the same values. We will nevertheless still
 apply a normalization to see what it looks like. This is confirmed by the
 density plot, as shown below:
 
-```{r warning=FALSE}
+```{r eval=TRUE}
 counts_density <- apply(data2plot, 2, density)
 
 # calculate the limits across all the samples
@@ -334,7 +334,7 @@ normalized_counts <- cpm(d)
 rownames(normalized_counts) <- filtered_table$external_gene_name
 nrow(normalized_counts)
 ```
-```{r warning=FALSE}
+```{r eval=TRUE}
 # we do add a pseudocount of 0.25 to ensure negative log values do not explode
 data2plot_after <- log2(normalized_counts + 0.25)
 boxplot(data2plot_after, ylab = "log2 CPM",
@@ -345,7 +345,7 @@ abline(h = median(apply(data2plot_after, 2, median)),
  col = "green", lwd = 0.6, lty = "dashed")
 ```
 
-```{r warning=FALSE}
+```{r eval=TRUE}
 counts_density <- apply(data2plot_after, 2, density)
 
 # Calculate the limits across all the samples
@@ -387,7 +387,7 @@ distributed, as well as how seeing how samples differ across treatments.
 
 We can visuzlize the sample separation using a multidimenstional scaling plot
 post normalization.
-```{r warning=FALSE}
+```{r eval=TRUE}
 # plotMDS(d, labels=groups,
 #   col = c("darkgreen","blue", "red")[factor(samples_type[, "treatment"])]
 # )
@@ -406,14 +406,14 @@ cex = 0.7, inset=c(0,-0.23))
 We can see from the MDS plot above that there does seem to be some separation 
 between the control samples and the ones with the γ-secretase inhibitors. 
 
-```{r warning=FALSE}
+```{r eval=TRUE}
 # model_design <- model.matrix(~samples_type[, "treatment"]+
 #                                samples_type[, "cell line"])
 # d <- estimateDisp(d, model_design)
 # plotBCV(d, col.tagwise = "black", col.common = "red", )
 ```
 ### Writing Out the Data
-```{r warning=FALSE}
+```{r eval=TRUE}
 write.table(normalized_counts, 
             file.path(
               getwd(),
