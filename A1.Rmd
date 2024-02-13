@@ -1,0 +1,376 @@
+---
+title: "BCB420 Assignment 1"
+author: "Kevin Zhu"
+output:
+  html_document:
+    df_print: paged
+    doc: yes
+    toc: true
+    theme: united
+  html_notebook: null
+---
+
+## Objective of Assignment 1
+The objective of this assignment is to produce a clean, normalized dataset that
+will be used for the following tasks in this course. 
+
+## Dataset Overview
+γ-Secretase is a protease known to cleave the CTFs of amyloid-beta precursor 
+protein (APP) at its gamma site. It is also known to cleave other substrates, 
+and has been associated pathways governing cell differentiation. However, we 
+still do not have a full understanding of what γ-Secretase does to 
+non-proliferating cells (such as neurons). 
+
+Dysfunction of lipid metabolism neurons has been linked with 
+Alzheimer's Disease. In mouse embryonic fibroblasts (MEFs), γ-secretase 
+inhibition lowered cellular cholesterol ester levels and reduced endocytosis of 
+the low-density lipoprotein receptor (LDLR). However, No studies were carried 
+out in human neurons, whose cholesterol metabolism is uniquely different from 
+that of glia or peripheral cells.
+
+The authors conducted RNA-seq experiments six biological replicates of induced 
+human neuron cells. There were three treatment protocols: Control, DAPT, and 
+LY411575. Specifically, DAPT and LY411575 treatments pharmaceutically induced 
+chronic inhibition of γ-secretase. The associated GEO ID for this dataset is 
+**GSE206102**. 
+
+## Installing dependencies and dowloading the packages
+<br>
+These dependencies has are already included with the command in the docker file
+
+```{r, message=FALSE}
+
+if (!requireNamespace("BiocManager", quietly = TRUE)){
+  install.packages("BiocManager")}
+
+if (!requireNamespace("GEOmetadb", quietly = TRUE)){
+  BiocManager::install("GEOmetadb")}
+
+if (!requireNamespace("GEOmetadb", quietly = TRUE)){
+  install.packages("knitr")}
+
+if (!requireNamespace("edgeR", quietly = TRUE)){
+  BiocManager::install("edgeR")}
+
+if (!requireNamespace("biomaRt", quietly = TRUE)){
+  BiocManager::install("biomaRt")}
+
+if (!requireNamespace("DBI", quietly = TRUE)){
+  install.packages("DBI")}
+
+if (!requireNamespace("GEOquery", quietly = TRUE)){
+  BiocManager::install("GEOquery")}
+
+library(GEOquery)
+library(knitr)
+library(edgeR)
+library(biomaRt)
+library(dplyr)
+library(purrr)
+```
+## Step 1: Loading the Expression Dataset
+This step retrieves the gene expression data from the GEO, using the accession
+number **GSE206102**. Note that the supplemental data is compressed, and thus 
+needs to be untarred to be accessible for later use. 
+
+### Introduction of Dataset
+```{r, message=FALSE}
+dataset_geo_id <- 'GSE206102'
+
+# downloading GEO dataset
+gse <- getGEO(dataset_geo_id ,GSEMatrix = FALSE)
+
+# Information about Platform
+current_gpl <- names(GPLList(gse))[1]
+current_gpl_info <- Meta(getGEO(current_gpl))
+
+list_of_samples <- gse@gsms
+
+# getting the sample descriptions
+samples_type <- do.call(rbind, lapply(list_of_samples,
+                                      FUN=function(x){
+                                        c(x@header$title,
+                                          x@header$characteristics_ch1)
+                                        }
+                                      )
+                        )
+
+colnames(samples_type) <- c("title", 
+                            "tissue",
+                            "cell line", 
+                            "cell type",
+                            "genotype", 
+                            "treatment")
+
+samples_type[,'tissue'] <- gsub(samples_type[,'tissue'], 
+                                pattern = "tissue: ", replacement = "")
+samples_type[,'cell line'] <- gsub(samples_type[,'cell line'], 
+                                   pattern = "cell line: ", replacement = "")
+samples_type[,'cell type'] <- gsub(samples_type[,'cell type'], 
+                                   pattern = "cell type: ", replacement = "")
+samples_type[,'genotype'] <- gsub(samples_type[,'genotype'], 
+                                   pattern = "genotype: ", replacement = "")
+samples_type[,'treatment'] <- gsub(samples_type[,'treatment'], 
+                                   pattern = "treatment: ", replacement = "")
+
+kable(samples_type[1:6,], format = "html")
+
+```
+
+**GEO ID:** `r dataset_geo_id`
+
+**Dataset Name:** Neuronal γ-secretase regulates lipid metabolism, linking 
+cholesterol to synaptic dysfunction in Alzheimer’s disease
+
+**Platform Title:** `r current_gpl_info$title`
+
+**Technology:** `r current_gpl_info$technology`
+
+**Submission Date:** `r current_gpl_info$submission_date`
+
+**Last Update Date:** `r current_gpl_info$last_update_date`
+
+**Organism:** `r current_gpl_info$organism`
+
+### Downloading the Dataset
+```{r, message=FALSE}
+
+# get the expression data
+# TODO: check if supp file exists first before download
+supp_files <- getGEOSuppFiles(dataset_geo_id, fetch_files = FALSE)
+tar_sup_filename = supp_files$fname[1]
+
+# untar files
+download_dir <- file.path(getwd())
+untar(tarfile = file.path(download_dir,dataset_geo_id,tar_sup_filename),
+      exdir = file.path(download_dir,dataset_geo_id))
+```
+
+Now that the data has been uncompressed, we can begin reading and combining all 
+the files.
+
+```{r eval=TRUE}
+# Function to extract information from the filename
+extract_info <- function(file) {
+  parts <- strsplit(basename(file), "_")[[1]]
+  data_id <- parts[1]
+  sample_name <- toString(
+    samples_type[, "title"][grep(data_id, rownames(samples_type))]
+    )
+  sample_name <- gsub(sample_name, pattern = "Replicate", replacement = "rep")
+  return(sample_name)
+  }
+
+# get all the untarred files
+file_list <- list.files(
+  path = file.path(download_dir, dataset_geo_id), 
+  pattern = "\\.hs.tsv.gz$", 
+  full.names = TRUE
+)
+
+# load list of dataframes
+data_list <- lapply(file_list, function(file) {
+  df <- read.table(file, header = TRUE)
+  df <- df[c("target_id", "est_counts")]
+  
+  counts_col <- extract_info(file)
+  
+  # replace 'est_counts' with a more readable name
+  colnames(df)[colnames(df) == "est_counts"] <- counts_col
+  return(df)
+})
+
+# combine list of dataframes using the appropriate ID
+combined_table <- data_list %>% reduce(left_join, by = "target_id")
+
+head(combined_table)
+```
+```{r eval=TRUE}
+dim(combined_table)
+```
+
+## Step 2: Cleaning the Data
+This step is necessary as the data table we have compiled contains counts at 
+the transcript level. We must first map this data to the proper HUGO symbols 
+before proceeding to any other steps. We can use `biomaRt` to accomplish this.
+
+### Converting Dataset from Transcript to Gene Level
+.
+```{r eval=TRUE}
+ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+ensembl_transcript_ids <- dplyr::pull(combined_table, target_id)
+
+# this step might take some time as it needs to query the database
+transcript_info <- getBM(attributes = c("ensembl_transcript_id",
+                                        "external_gene_name"),
+                         filters = "ensembl_transcript_id",
+                         values = ensembl_transcript_ids,
+                         mart = ensembl)
+
+hgnc_combined_table <- merge(combined_table, transcript_info, 
+                          by.x = "target_id", 
+                          by.y = "ensembl_transcript_id", 
+                          all.x = TRUE) %>% relocate(target_id, 
+                                                     external_gene_name)
+
+head(hgnc_combined_table)
+```
+
+```{r eval=TRUE}
+dim(hgnc_combined_table)
+```
+
+Unfortunately, there were transcripts in which `biomaRt` was unable to find the 
+corresponding HUGO gene symbol. Looking through these missing transcripts, it 
+seems like the majority of them are outdated and thus no longer in the current 
+gene set. 
+```{r eval=TRUE}
+missing_values <- hgnc_combined_table[
+  is.na(hgnc_combined_table$external_gene_name), ]$target_id
+
+length(missing_values)
+```
+
+### Filtering the Data
+Now that we have a table with the appropriate HUGO gene symbol for each 
+transcript, we can begin actually filtering the data.
+```{r eval=TRUE}
+# remove rows that do not have HUGO symbol
+hgnc_combined_table <- hgnc_combined_table[
+  !is.na(hgnc_combined_table$external_gene_name), ]
+
+# counts are currently still on the transcript-level
+hgnc_combined_table <- subset(hgnc_combined_table, select = -c(target_id))
+
+# we are summing the transcript count values when they share the same gene ID
+hgnc_combined_table <- hgnc_combined_table %>%
+  group_by(external_gene_name) %>%
+  summarise_all(sum)
+
+dim(hgnc_combined_table)
+```
+
+Now that we have gene-level counts, we can start filtering out the low-count
+genes
+```{r eval=TRUE}
+# there are 6 samples for each condition, removing low counts
+keep <- rowSums( edgeR::cpm(subset(hgnc_combined_table, select = 
+                                     -c(external_gene_name))) > 1 ) >= 6
+filtered_table <- hgnc_combined_table[keep, ]
+dim(filtered_table) 
+```
+
+## Step 3: Normalizing the Data
+Now that we have cleaned our data, we can now proceed to the normalization step. 
+Before this, we must look at how our data looks pre-normalized. 
+
+### Initial Plotting
+```{r warning=FALSE}
+# boxplot for pre-normalized dataset
+data2plot <- log2(cpm(subset(filtered_table, select =
+                               -c(external_gene_name))))
+
+boxplot(data2plot,xlab = "Samples", ylab = "log2 CPM",
+ las = 2, cex = 0.5, cex.lab = 0.5,
+ cex.axis = 0.5, main = "Pre-normalized RNASeq data")
+
+#draw the median on each box plot
+abline(h = median(apply(data2plot, 2, median)),
+ col = "green", lwd = 0.6, lty = "dashed")
+```
+The overall distributions between the samples look almost identical, 
+with medians and quartiles at the same values. We will nevertheless still 
+apply a normalization to see what it looks like. This is confirmed by the
+density plot, as shown below:
+
+```{r warning=FALSE}
+counts_density <- apply(data2plot, 2, density)
+
+# calculate the limits across all the samples
+xlim <- 0
+ylim <- 0
+for (i in 1:length(counts_density)) {
+  xlim <- range(c(xlim, counts_density[[i]]$x))
+  ylim <- range(c(ylim, counts_density[[i]]$y))
+}
+
+cols <- rainbow(length(counts_density))
+ltys <- rep(1, length(counts_density))
+
+# plot the first density plot to initialize the plot
+plot(counts_density[[1]], xlim=xlim, ylim=ylim, type="n",
+     ylab="Smoothing density of log2-CPM",
+     main="", cex.lab = 0.85)
+
+# plot each line
+for (i in 1:length(counts_density))
+  lines(counts_density[[i]], col=cols[i], lty=ltys[i])
+
+# create legend
+legend("topright", colnames(data2plot),
+       col=cols, lty=ltys, cex=0.7,
+       border ="blue", text.col = "green4",
+       merge = TRUE, bg = "gray90")
+
+```
+
+### Normalization using TMM
+```{r eval=TRUE}
+filtered_data_matrix <- as.matrix(subset(filtered_table, select = 
+                                     -c(external_gene_name)))
+# let rownames be the HGNC symbols
+rownames(filtered_data_matrix) <- filtered_table$external_gene_name
+groups <- colnames(subset(filtered_table, select = -c(external_gene_name)))
+# d = DGEList(counts=filtered_data_matrix, group=groups)
+d = DGEList(counts=filtered_table, group=groups)
+# normalization
+d = calcNormFactors(d)
+normalized_counts <- cpm(d)
+rownames(normalized_counts) <- filtered_table$external_gene_name
+nrow(normalized_counts)
+```
+```{r warning=FALSE}
+data2plot_after <- log2(normalized_counts)
+boxplot(data2plot_after, ylab = "log2 CPM",
+ las = 2, cex = 0.5, cex.lab = 0.5,
+ cex.axis = 0.5, main = "Normalized RNASeq Samples")
+#draw the median on each box plot
+abline(h = median(apply(data2plot_after, 2, median)),
+ col = "green", lwd = 0.6, lty = "dashed")
+```
+
+```{r warning=FALSE}
+counts_density <- apply(data2plot_after, 2, density)
+#calculate the limits across all the samples
+xlim <- 0; ylim <- 0
+for (i in 1:length(counts_density)) {
+  xlim <- range(c(xlim, counts_density[[i]]$x));
+  ylim <- range(c(ylim, counts_density[[i]]$y))
+  }
+cols <- rainbow(length(counts_density))
+ltys <- rep(1, length(counts_density))
+#plot the first density plot to initialize the plot
+plot(counts_density[[1]], xlim=xlim, ylim=ylim, type="n",
+ylab="Smoothing density of log2-CPM",
+main="", cex.lab = 0.85)
+#plot each line
+for (i in 1:length(counts_density))
+lines(counts_density[[i]], col=cols[i], lty=ltys[i])
+#create legend
+legend("topright", colnames(data2plot),
+col=cols, lty=ltys, cex=0.75,
+border ="blue", text.col = "green4",
+merge = TRUE, bg = "gray90")
+```
+
+We can see that these results are essentially identical to the plot we made 
+earlier. This likely means that the data had already been normalized. It was 
+good to check though.
+
+## Step 4: Initial Analysis and Discussion
+```{r warning=FALSE}
+plotMDS(d, labels=groups,
+  # col = c("darkgreen","blue")[factor(samples$gender)]
+)
+```
