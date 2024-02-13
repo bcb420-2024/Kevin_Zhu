@@ -282,6 +282,7 @@ boxplot(data2plot,xlab = "Samples", ylab = "log2 CPM",
 abline(h = median(apply(data2plot, 2, median)),
  col = "green", lwd = 0.6, lty = "dashed")
 ```
+
 The overall distributions between the samples look almost identical, 
 with medians and quartiles at the same values. We will nevertheless still 
 apply a normalization to see what it looks like. This is confirmed by the
@@ -470,14 +471,38 @@ The final dataset coverage is `r dim(normalized_counts)[1]` genes. There are
 18 columns (six biological replicates, each with three treatments).
 
 ## References
-library(GEOquery)
-library(knitr)
-library(edgeR)
-library(biomaRt)
-library(dplyr)
-library(purrr)
-ensembl website?
-paper citation?
+\setlength{\parindent}{-0.2in}
+\setlength{\leftskip}{0.2in}
+\setlength{\parskip}{8pt}
+\noindent
 
+<div style="text-indent: -40px; padding-left: 40px;">
+Davis, S. and Meltzer, P. S. GEOquery: a bridge between the Gene Expression 
+Omnibus (GEO) and BioConductor. Bioinformatics, 2007, 14, 1846-1847
 
+Essayan-Perez, Sofia, and Thomas C Südhof. “Neuronal γ-Secretase Regulates 
+Lipid Metabolism, Linking Cholesterol to Synaptic Dysfunction in Alzheimer’s 
+Disease.” Neuron, vol. 111, no. 20, 1 Oct. 2023, pp. 3176-3194.e7, https://doi.org/10.1016/j.neuron.2023.07.005.
 
+Robinson MD, McCarthy DJ and Smyth GK (2010). edgeR: a Bioconductor package for 
+differential expression analysis of digital gene expression data. 
+Bioinformatics 26, 139-140
+
+Mapping identifiers for the integration of genomic datasets with the 
+R/Bioconductor package biomaRt. Steffen Durinck, Paul T. Spellman, Ewan Birney 
+and Wolfgang Huber, Nature Protocols 4, 1184-1191 (2009).
+
+Martin, Fergal J., et al. “Ensembl 2023.” Nucleic Acids Research, 
+vol. 51, no. D1, 6 Jan. 2023, pp. D933–D941, pubmed.ncbi.nlm.nih.gov/36318249/, https://doi.org/10.1093/nar/gkac958.
+  
+Wickham H, Henry L (2023). _purrr: Functional Programming Tools_. R package 
+version 1.0.2, https://github.com/tidyverse/purrr, 
+<https://purrr.tidyverse.org/>.
+
+Wickham H, François R, Henry L, Müller K, Vaughan D (2023). _dplyr: A Grammar 
+of Data Manipulation_. R package version 1.1.4, 
+<https://CRAN.R-project.org/package=dplyr>.
+  
+Yihui Xie (2015) Dynamic Documents with R and knitr. 2nd edition. Chapman and 
+Hall/CRC. ISBN 978-1498716963
+</div>
