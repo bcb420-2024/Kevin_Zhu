@@ -85,6 +85,24 @@ current_gpl_info <- Meta(getGEO(current_gpl))
 
 list_of_samples <- gse@gsms
 
+```
+
+**GEO ID:** `r dataset_geo_id`
+
+**Dataset Name:** Neuronal γ-secretase regulates lipid metabolism, linking 
+cholesterol to synaptic dysfunction in Alzheimer’s disease
+
+**Platform Title:** `r current_gpl_info$title`
+
+**Technology:** `r current_gpl_info$technology`
+
+**Submission Date:** `r current_gpl_info$submission_date`
+
+**Last Update Date:** `r current_gpl_info$last_update_date`
+
+**Organism:** `r current_gpl_info$organism`
+
+```{r, message=FALSE}
 # getting the sample descriptions
 samples_type <- do.call(rbind, lapply(list_of_samples,
                                       FUN=function(x){
@@ -115,21 +133,6 @@ samples_type[,'treatment'] <- gsub(samples_type[,'treatment'],
 kable(samples_type[1:6,], format = "html")
 
 ```
-
-**GEO ID:** `r dataset_geo_id`
-
-**Dataset Name:** Neuronal γ-secretase regulates lipid metabolism, linking 
-cholesterol to synaptic dysfunction in Alzheimer’s disease
-
-**Platform Title:** `r current_gpl_info$title`
-
-**Technology:** `r current_gpl_info$technology`
-
-**Submission Date:** `r current_gpl_info$submission_date`
-
-**Last Update Date:** `r current_gpl_info$last_update_date`
-
-**Organism:** `r current_gpl_info$organism`
 
 ### Downloading the Dataset
 Note that an earlier attempt to process the file involved using the supplemental 
@@ -193,33 +196,48 @@ hgnc_symbols <- getBM(
   uniqueRows = TRUE
 )
 
-# group by entrezgene_id and keep one row for each unique combination
-unique_hgnc_symbols <- hgnc_symbols %>%
-  group_by(entrezgene_id) %>%
-  arrange(hgnc_symbol) %>%
-  filter(!hgnc_symbol %in% lag(hgnc_symbol)) %>%
+# remove duplicates such that each entrezgene_id has a unique HGNC symbol
+unique_hgnc_symbols <- group_by(hgnc_symbols, hgnc_symbol) %>% 
   slice(1) %>%
-  ungroup()
+  group_by(entrezgene_id) %>%
+  slice(1)
+
+unique_hgnc_symbols <- unique_hgnc_symbols[
+  !(unique_hgnc_symbols$hgnc_symbol == ""), ]
+
+is_entrez_unique <- 
+  length(unique(unique_hgnc_symbols$entrezgene_id)) == nrow(unique_hgnc_symbols)
+is_hgnc_unique <- 
+  length(unique(unique_hgnc_symbols$hgnc_symbol)) == nrow(unique_hgnc_symbols)
+
+# Check if both conditions are satisfied
+if (is_entrez_unique && is_hgnc_unique) {
+  print("Both columns have unique values.")
+} else {
+  print("Failed")
+}
 
 # Merge the table with HGNC symbols
 hgnc_tbl <- merge(filtered_tbl, unique_hgnc_symbols, 
-                  by.x = "row.names", by.y = "entrezgene_id")
+                  by.x = "row.names", by.y = "entrezgene_id", all=T)
 
-missing_values <- rownames(hgnc_tbl[hgnc_tbl$hgnc_symbol == "", ])
+missing_values <- rownames(hgnc_tbl[is.na(hgnc_tbl$hgnc_symbol), ])
 length(missing_values)
 ```
 
 Unfortunately, there were NCBI IDs in which `biomaRt` was unable to find the 
-corresponding HUGO gene symbol.It seems that the majority of them are either 
+corresponding HUGO gene symbol. It seems that the majority of them are either 
 outdated and thus no longer in the current gene set, or they are pseudogenes 
-that do not encode functional proteins. 
+that do not encode functional proteins. Furthermore, each Entrez ID sometimes
+corresponds to multiple HGNC symbols, which means more some duplicates had to 
+be removed from the dataset in order to have unique row names. 
 
 ```{r eval=TRUE}
 # remove rows that do not have HUGO symbol
-hgnc_tbl <- hgnc_tbl[!(hgnc_tbl$hgnc_symbol == ""), ]
+hgnc_tbl <- hgnc_tbl[!(is.na(hgnc_tbl$hgnc_symbol)), ]
 
 # Set rownames using HGNC symbols and remove extra columns
-rownames(hgnc_tbl) <- hgnc_tbl$external_gene_name
+rownames(hgnc_tbl) <- hgnc_tbl$hgnc_symbol
 filtered_tbl <- hgnc_tbl[, -c(1, ncol(hgnc_tbl))]
 
 # Print the updated table
