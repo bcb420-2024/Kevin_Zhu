@@ -10,4 +10,4 @@ Link to the Wiki page: https://github.com/bcb420-2024/Kevin_Zhu/wiki
 3. [Choosing GEO Dataset](https://github.com/bcb420-2024/Kevin_Zhu/wiki/Choosing-GEO-Dataset)
 
 # Assignments
-[Assignment 1](https://github.com/bcb420-2024/Kevin_Zhu/wiki/Assignment-1): [Notebook](https://github.com/bcb420-2024/Kevin_Zhu/blob/main/A1/A1.html)
+[Assignment 1](https://github.com/bcb420-2024/Kevin_Zhu/wiki/Assignment-1): [Notebook](https://github.com/bcb420-2024/Kevin_Zhu/blob/main/A1/A1_KevinZhu.html)
