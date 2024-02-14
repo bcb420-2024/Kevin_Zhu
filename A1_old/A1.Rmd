@@ -70,7 +70,8 @@ library(purrr)
 ```
 ## Step 1: Loading the Expression Dataset
 This step retrieves the gene expression data from the GEO, using the accession
-number **GSE206102**. 
+number **GSE206102**. Note that the supplemental data is compressed, and thus 
+needs to be untarred to be accessible for later use. 
 
 ### Introduction of Dataset
 ```{r, message=FALSE}
@@ -132,103 +133,106 @@ cholesterol to synaptic dysfunction in Alzheimer’s disease
 **Organism:** `r current_gpl_info$organism`
 
 ### Downloading the Dataset
-Note that an earlier attempt to process the file involved using the supplemental 
-file provided on GEO. However, this data was at the transcript-level. To
-circumvent this issue, I am using GEO's new beta feature to download gene-level 
-raw RNA-seq counts, per Prof. Isserlin's announcement. 
-
 ```{r, message=FALSE}
 
-urld <- "https://www.ncbi.nlm.nih.gov/geo/download/?format=file&type=rnaseq_counts"
-path <- paste(urld, "acc=GSE206102", 
-              "file=GSE206102_raw_counts_GRCh38.p13_NCBI.tsv.gz", sep="&")
-tbl <- as.matrix(data.table::fread(path, header=T, colClasses="integer"), 
-                 rownames=1)
-head(tbl)
+# get the expression data
+# TODO: check if supp file exists first before download
+supp_files <- getGEOSuppFiles(dataset_geo_id, fetch_files = FALSE)
+tar_sup_filename = supp_files$fname[1]
+
+# untar files
+download_dir <- file.path(getwd())
+untar(tarfile = file.path(download_dir,dataset_geo_id,tar_sup_filename),
+      exdir = file.path(download_dir,dataset_geo_id))
 ```
-Now that we have the raw gene counts, we can rename the columns to make them 
-easier to understand.
+
+Now that the data has been uncompressed, we can begin reading and combining all 
+the files.
 
 ```{r eval=TRUE}
-to_keep <- vector()
-for (col_name in colnames(tbl)) {
-  idx <- grep(col_name, rownames(samples_type))
-  to_keep <- c(to_keep, idx)
-  new_col_name <- toString(samples_type[, "title"][idx])
-  colnames(tbl)[colnames(tbl) == col_name] <- new_col_name
-}
+# Function to extract information from the filename
+extract_info <- function(file) {
+  parts <- strsplit(basename(file), "_")[[1]]
+  data_id <- parts[1]
+  sample_name <- toString(
+    samples_type[, "title"][grep(data_id, rownames(samples_type))]
+    )
+  sample_name <- gsub(sample_name, pattern = "Replicate", replacement = "rep")
+  return(sample_name)
+  }
 
-samples_type <- samples_type[to_keep, ]
+# get all the untarred files
+file_list <- list.files(
+  path = file.path(download_dir, dataset_geo_id), 
+  pattern = "\\.hs.tsv.gz$", 
+  full.names = TRUE
+)
 
-head(tbl)
+# load list of dataframes
+data_list <- lapply(file_list, function(file) {
+  df <- read.table(file, header = TRUE)
+  df <- df[c("target_id", "est_counts")]
+  
+  counts_col <- extract_info(file)
+  
+  # replace 'est_counts' with a more readable name
+  colnames(df)[colnames(df) == "est_counts"] <- counts_col
+  return(df)
+})
+
+# combine list of dataframes using the appropriate ID
+combined_table <- data_list %>% reduce(left_join, by = "target_id")
+
+head(combined_table)
+```
+```{r eval=TRUE}
+dim(combined_table)
 ```
 
 ## Step 2: Cleaning the Data
-In this step, we will be removing genes with low counts as wll as mapping the
-row IDs to the proper HUGO symbols
+This step is necessary as the data table we have compiled contains counts at 
+the transcript level. We must first map this data to the proper HUGO symbols 
+before proceeding to any other steps. We can use `biomaRt` to accomplish this.
 
-### Filtering Rows with Low Counts
+### Converting Dataset from Transcript to Gene Level
+.
 ```{r eval=TRUE}
-# Removing low counts; we can play around with the min_samples value
-min_samples <- 4
-keep <- rowSums( edgeR::cpm(tbl) > 1 ) >= min_samples
-filtered_tbl <- tbl[keep, ]
-dim(filtered_tbl) 
+ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+ensembl_transcript_ids <- dplyr::pull(combined_table, target_id)
+
+# this step might take some time as it needs to query the database
+transcript_info <- getBM(attributes = c("ensembl_transcript_id",
+                                        "external_gene_name"),
+                         filters = "ensembl_transcript_id",
+                         values = ensembl_transcript_ids,
+                         mart = ensembl)
+
+hgnc_combined_table <- merge(combined_table, transcript_info, 
+                          by.x = "target_id", 
+                          by.y = "ensembl_transcript_id", 
+                          all.x = TRUE) %>% relocate(target_id, 
+                                                     external_gene_name)
+
+head(hgnc_combined_table)
 ```
 
-### Converting to HGNC symbols
-
 ```{r eval=TRUE}
-ncbi_gene_ids <- rownames(filtered_tbl)
-ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-out_label <- "hgnc_symbol"
-hgnc_symbols <- getBM(
-  attributes = c("entrezgene_id", "external_gene_name"),
-  filters = "entrezgene_id",
-  values = ncbi_gene_ids,
-  mart = ensembl,
-  uniqueRows = TRUE
-)
+dim(hgnc_combined_table)
+```
 
-# group by entrezgene_id and keep one row for each unique combination
-unique_hgnc_symbols <- hgnc_symbols %>%
-  group_by(entrezgene_id) %>%
-  arrange(external_gene_name) %>%
-  slice(1) %>%
-  ungroup()
+Unfortunately, there were transcripts in which `biomaRt` was unable to find the 
+corresponding HUGO gene symbol. Looking through these missing transcripts, it 
+seems like the majority of them are outdated and thus no longer in the current 
+gene set. 
+```{r eval=TRUE}
+missing_values <- hgnc_combined_table[
+  is.na(hgnc_combined_table$external_gene_name), ]$target_id
 
-unique_hgnc_symbols <- hgnc_symbols %>%
-  group_by(external_gene_name) %>%
-  slice(1) %>%
-  ungroup()
-
-# Merge the table with HGNC symbols
-hgnc_tbl <- merge(filtered_tbl, unique_hgnc_symbols, 
-                  by.x = "row.names", by.y = "entrezgene_id")
-
-missing_values <- rownames(hgnc_tbl[hgnc_tbl$external_gene_name == "", ])
 length(missing_values)
 ```
 
-Unfortunately, there were NCBI IDs in which `biomaRt` was unable to find the 
-corresponding HUGO gene symbol.It seems that the majority of them are either 
-outdated and thus no longer in the current gene set, or they are pseudogenes 
-that do not encode functional proteins. 
-
-```{r eval=TRUE}
-# remove rows that do not have HUGO symbol
-hgnc_tbl <- hgnc_tbl[!(hgnc_tbl$external_gene_name == ""), ]
-
-# Set rownames using HGNC symbols and remove extra columns
-rownames(hgnc_tbl) <- hgnc_tbl$external_gene_name
-hgnc_tbl <- hgnc_tbl[, -c(1, ncol(hgnc_tbl))]
-
-# Print the updated table
-print(hgnc_tbl)
-```
-
-
-
+### Filtering the Data
 Now that we have a table with the appropriate HUGO gene symbol for each 
 transcript, we can begin actually filtering the data.
 ```{r eval=TRUE}
@@ -247,6 +251,18 @@ hgnc_combined_table <- hgnc_combined_table %>%
 dim(hgnc_combined_table)
 ```
 
+Now that we have gene-level counts, we can start filtering out the low-count
+genes
+```{r eval=TRUE}
+# there are 6 samples for each condition, removing low counts
+min_samples <- 6
+keep <- rowSums( edgeR::cpm(subset(hgnc_combined_table, 
+                                   select = -c(external_gene_name)))
+                 > 1 ) >= min_samples
+filtered_table <- hgnc_combined_table[keep, ]
+dim(filtered_table) 
+```
+
 ## Step 3: Normalizing the Data
 Now that we have cleaned our data, we can now proceed to the normalization step. 
 Before this, we must look at how our data looks pre-normalized. 
@@ -255,7 +271,8 @@ Before this, we must look at how our data looks pre-normalized.
 ```{r eval=TRUE}
 # boxplot for pre-normalized dataset
 # we do add a pseudocount of 0.25 to ensure negative log values do not explode
-data2plot <- log2(cpm(filtered_tbl)+0.25)
+data2plot <- log2(cpm(subset(filtered_table, select =
+                               -c(external_gene_name)))+0.25)
 
 boxplot(data2plot,xlab = "Samples", ylab = "log2 CPM",
  las = 2, cex = 0.5, cex.lab = 0.5,
@@ -266,8 +283,7 @@ abline(h = median(apply(data2plot, 2, median)),
  col = "green", lwd = 0.6, lty = "dashed")
 ```
 
-Interestingly, despite having downloaded the raw RNA-seq data, the 
-overall distributions between the samples look almost identical, 
+The overall distributions between the samples look almost identical, 
 with medians and quartiles at the same values. We will nevertheless still 
 apply a normalization to see what it looks like. This is confirmed by the
 density plot, as shown below:
@@ -307,21 +323,23 @@ legend("topright", colnames(data2plot),
 
 ### Normalization using TMM
 ```{r eval=TRUE}
-filtered_data_matrix <- as.matrix(filtered_tbl)
-
-# groups <- colnames(filtered_tbl)
-groups <- samples_type[, "treatment"]
+filtered_data_matrix <- as.matrix(subset(filtered_table, select = 
+                                     -c(external_gene_name)))
+# let rownames be the HGNC symbols
+rownames(filtered_data_matrix) <- filtered_table$external_gene_name
+groups <- colnames(subset(filtered_table, select = -c(external_gene_name)))
 # d = DGEList(counts=filtered_data_matrix, group=groups)
-d = DGEList(counts=filtered_tbl, group=groups)
+d = DGEList(counts=filtered_table, group=groups)
 # normalization
 d = calcNormFactors(d)
 normalized_counts <- cpm(d)
+rownames(normalized_counts) <- filtered_table$external_gene_name
 nrow(normalized_counts)
 ```
 ```{r eval=TRUE}
 # we do add a pseudocount of 0.25 to ensure negative log values do not explode
 data2plot_after <- log2(normalized_counts + 0.25)
-boxplot(data2plot_after, xlab = "Samples", ylab = "log2 CPM",
+boxplot(data2plot_after, ylab = "log2 CPM",
  las = 2, cex = 0.5, cex.lab = 0.5,
  cex.axis = 0.5, main = "Normalized RNASeq Samples")
 #draw the median on each box plot
@@ -362,11 +380,8 @@ legend("topright", colnames(data2plot),
 ```
 
 We can see that these results are essentially identical to the plot we made 
-earlier. In fact, the normalization factors are all very close to 1, which 
-probably means that the data had already been normalized. Note that the dataset 
-used in this analysis is supposed to be the raw RNA-seq counts. Thus, the 
-original data submitted to GEO had likely been pre-normalized, and NCBI simply
-performed the processing work to map the data to gene-level counts.
+earlier. This likely means that the data had already been normalized. It was 
+good to check though.
 
 ## Step 4: Initial Analysis and Discussion
 In this step, we can perform further analyses to see how the data is 
@@ -379,6 +394,10 @@ post normalization. We can see from the MDS plot below that there does seem to
 be some separation between the control samples and the ones with the 
 γ-secretase inhibitors.
 ```{r eval=TRUE}
+# plotMDS(d, labels=groups,
+#   col = c("darkgreen","blue", "red")[factor(samples_type[, "treatment"])]
+# )
+
 plotMDS(d, labels=NULL,pch=1,
   col = c("darkgreen","blue", "red")[factor(samples_type[, "treatment"])]
 )
@@ -405,8 +424,8 @@ As shown below, it seems like the data follows a negative binomial distribution,
 with the points following relatively closely the blue line. 
 
 ```{r eval=TRUE}
-plotMeanVar(d, show.raw.vars = TRUE, show.tagwise.vars = TRUE, NBline = TRUE, 
-            show.ave.raw.vars = TRUE, show.binned.common.disp.vars = TRUE, 
+plotMeanVar(d, show.raw.vars = TRUE, show.tagwise.vars = TRUE, NBline = FALSE, 
+            show.ave.raw.vars = FALSE, show.binned.common.disp.vars = FALSE, 
             ylim = c(1,1e10))
 
 ```
@@ -416,6 +435,7 @@ plotMeanVar(d, show.raw.vars = TRUE, show.tagwise.vars = TRUE, NBline = TRUE,
 write.table(normalized_counts, 
             file.path(
               getwd(),
+              dataset_geo_id, 
               paste(dataset_geo_id, 
                     "normalized_filtered_RSEM_counts.txt",sep="_")
               ),
