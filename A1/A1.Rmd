@@ -146,8 +146,11 @@ tbl <- as.matrix(data.table::fread(path, header=T, colClasses="integer"),
                  rownames=1)
 head(tbl)
 ```
+
 Now that we have the raw gene counts, we can rename the columns to make them 
-easier to understand.
+easier to understand. We can also see that there are 12 columns instead of 18 
+columns. It seems like a few of the samples were omitted from the original 
+RNA-seq dataset; we will need to modify the `samples_type` dataframe.
 
 ```{r eval=TRUE}
 to_keep <- vector()

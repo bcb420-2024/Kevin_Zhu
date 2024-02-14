@@ -1975,7 +1975,10 @@ head(tbl)</code></pre>
 ## 100302278          1          0          0          1          0          1
 ## 645520             0          0          0          0          0          0</code></pre>
 <p>Now that we have the raw gene counts, we can rename the columns to
-make them easier to understand.</p>
+make them easier to understand. We can also see that there are 12
+columns instead of 18 columns. It seems like a few of the samples were
+omitted from the original RNA-seq dataset; we will need to modify the
+<code>samples_type</code> dataframe.</p>
 <pre class="r"><code>to_keep &lt;- vector()
 for (col_name in colnames(tbl)) {
   idx &lt;- grep(col_name, rownames(samples_type))
