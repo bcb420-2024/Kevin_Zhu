@@ -183,7 +183,7 @@ ncbi_gene_ids <- rownames(filtered_tbl)
 ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
 out_label <- "hgnc_symbol"
 hgnc_symbols <- getBM(
-  attributes = c("entrezgene_id", "external_gene_name"),
+  attributes = c("entrezgene_id", "hgnc_symbol"),
   filters = "entrezgene_id",
   values = ncbi_gene_ids,
   mart = ensembl,
@@ -193,12 +193,8 @@ hgnc_symbols <- getBM(
 # group by entrezgene_id and keep one row for each unique combination
 unique_hgnc_symbols <- hgnc_symbols %>%
   group_by(entrezgene_id) %>%
-  arrange(external_gene_name) %>%
-  slice(1) %>%
-  ungroup()
-
-unique_hgnc_symbols <- hgnc_symbols %>%
-  group_by(external_gene_name) %>%
+  arrange(hgnc_symbol) %>%
+  filter(!hgnc_symbol %in% lag(hgnc_symbol)) %>%
   slice(1) %>%
   ungroup()
 
@@ -206,7 +202,7 @@ unique_hgnc_symbols <- hgnc_symbols %>%
 hgnc_tbl <- merge(filtered_tbl, unique_hgnc_symbols, 
                   by.x = "row.names", by.y = "entrezgene_id")
 
-missing_values <- rownames(hgnc_tbl[hgnc_tbl$external_gene_name == "", ])
+missing_values <- rownames(hgnc_tbl[hgnc_tbl$hgnc_symbol == "", ])
 length(missing_values)
 ```
 
@@ -217,34 +213,14 @@ that do not encode functional proteins.
 
 ```{r eval=TRUE}
 # remove rows that do not have HUGO symbol
-hgnc_tbl <- hgnc_tbl[!(hgnc_tbl$external_gene_name == ""), ]
+hgnc_tbl <- hgnc_tbl[!(hgnc_tbl$hgnc_symbol == ""), ]
 
 # Set rownames using HGNC symbols and remove extra columns
 rownames(hgnc_tbl) <- hgnc_tbl$external_gene_name
-hgnc_tbl <- hgnc_tbl[, -c(1, ncol(hgnc_tbl))]
+filtered_tbl <- hgnc_tbl[, -c(1, ncol(hgnc_tbl))]
 
 # Print the updated table
-print(hgnc_tbl)
-```
-
-
-
-Now that we have a table with the appropriate HUGO gene symbol for each 
-transcript, we can begin actually filtering the data.
-```{r eval=TRUE}
-# remove rows that do not have HUGO symbol
-hgnc_combined_table <- hgnc_combined_table[
-  !is.na(hgnc_combined_table$external_gene_name), ]
-
-# counts are currently still on the transcript-level
-hgnc_combined_table <- subset(hgnc_combined_table, select = -c(target_id))
-
-# we are summing the transcript count values when they share the same gene ID
-hgnc_combined_table <- hgnc_combined_table %>%
-  group_by(external_gene_name) %>%
-  summarise_all(sum)
-
-dim(hgnc_combined_table)
+head(filtered_tbl)
 ```
 
 ## Step 3: Normalizing the Data
@@ -424,7 +400,7 @@ write.table(normalized_counts,
 
 ### Questions and Answers
 **What are the control and test conditions of the dataset?**\
-The RNA-seq experiment was conducted over siz biological replicates of induced
+The RNA-seq experiment was conducted over six biological replicates of induced
 neuronal cells. Tehre were three treatments: control (0.6% DMSO), DAPT(40 uM), 
 and LY411575(2.5 uM). The latter two treatments were used to chronically inhibit
 γ-secretase.
@@ -440,16 +416,17 @@ and synapses.
 
 **Were there expression values that were not unique for specific genes?**\
 This dataset was originally published at the transcript level using ensembl 
-transcript IDs. After mapping these transcripts to their corresponding HUGO
-symbols, there were many duplicates, as multiple transcripts can be mapped to 
-the same gene. In order fix this issue, I simply summed over the counts of 
-transcripts that mapped to the same gene. 
+transcript IDs. As such, I used the the NCBI-generated RNA-seq count data, which
+had gene-level expression, mapped to unique Entrez Gene IDs. However, when 
+mapping to HUGO symbols, there was an issue with `biomaRt` returning multiple
+HGNC IDs for a single Entrez Gene ID, resulting in duplicate genes that had to
+be removed.
 
 **Were there expression values that couldn't be mapped to HUGO symbols?**\
-There were a few transcripts in the original dataset that likely had outdated 
-ensembl IDs, as `biomaRt` was unable to locate their HUGO symbol. After the 
-conversion step from transcript to gene-level expression, 3300 transcripts were 
-omitted from the dataset. 
+There were a few genes in the original dataset that likely had outdated 
+Entrez Gene IDs, as `biomaRt` was unable to locate their HUGO symbol. After this 
+conversion step from transcript to gene-level expression, 
+`r length(missing_values)` genes were omitted from the dataset. \
 
 **How many outliers were removed?**\
 I did not remove any sample outliers. As shown by the density and box plots, it
@@ -460,13 +437,16 @@ expressed when it had >1 count in at least `r min_samples` samples.
 
 **How did you handle replicates?**\
 The dataset contained six biological replicates, each with three treatments.
-Thus, the final output data table has 18 columns (six biological replicates, 
-each with three treatments). Note that when removing genes with low sample 
-counts, I removed entire rows to keep the data well-organized.
+However, the data NCBI-generated RNA-seq count data only has twelve total 
+samples, with Replicates 1-3 each missing two conditions. Nevertheless, because
+the samples did not seem to be highly paired between replicates, the analysis
+was performed on the 12 samples. Thus, the final output data table has 12 
+columns. Note that when removing genes with low sample counts, I removed entire
+rows to keep the data consistent.
 
 **What is the final coverage of your dataset?**\
 The final dataset coverage is `r dim(normalized_counts)[1]` genes. There are 
-18 columns (six biological replicates, each with three treatments).
+12 columns (each condition has four total replicates).
 
 ## References
 \setlength{\parindent}{-0.2in}
@@ -480,7 +460,8 @@ Omnibus (GEO) and BioConductor. Bioinformatics, 2007, 14, 1846-1847
 
 Essayan-Perez, Sofia, and Thomas C Südhof. “Neuronal γ-Secretase Regulates 
 Lipid Metabolism, Linking Cholesterol to Synaptic Dysfunction in Alzheimer’s 
-Disease.” Neuron, vol. 111, no. 20, 1 Oct. 2023, pp. 3176-3194.e7, https://doi.org/10.1016/j.neuron.2023.07.005.
+Disease.” Neuron, vol. 111, no. 20, 1 Oct. 2023, pp. 3176-3194.e7, 
+https://doi.org/10.1016/j.neuron.2023.07.005.
 
 Robinson MD, McCarthy DJ and Smyth GK (2010). edgeR: a Bioconductor package for 
 differential expression analysis of digital gene expression data. 
@@ -491,7 +472,8 @@ R/Bioconductor package biomaRt. Steffen Durinck, Paul T. Spellman, Ewan Birney
 and Wolfgang Huber, Nature Protocols 4, 1184-1191 (2009).
 
 Martin, Fergal J., et al. “Ensembl 2023.” Nucleic Acids Research, 
-vol. 51, no. D1, 6 Jan. 2023, pp. D933–D941, pubmed.ncbi.nlm.nih.gov/36318249/, https://doi.org/10.1093/nar/gkac958.
+vol. 51, no. D1, 6 Jan. 2023, pp. D933–D941, pubmed.ncbi.nlm.nih.gov/36318249/, 
+https://doi.org/10.1093/nar/gkac958.
   
 Wickham H, Henry L (2023). _purrr: Functional Programming Tools_. R package 
 version 1.0.2, https://github.com/tidyverse/purrr, 
