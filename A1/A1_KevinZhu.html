@@ -2054,19 +2054,7 @@ unique_hgnc_symbols &lt;- group_by(hgnc_symbols, hgnc_symbol) %&gt;%
 unique_hgnc_symbols &lt;- unique_hgnc_symbols[
   !(unique_hgnc_symbols$hgnc_symbol == &quot;&quot;), ]
 
-is_entrez_unique &lt;- 
-  length(unique(unique_hgnc_symbols$entrezgene_id)) == nrow(unique_hgnc_symbols)
-is_hgnc_unique &lt;- 
-  length(unique(unique_hgnc_symbols$hgnc_symbol)) == nrow(unique_hgnc_symbols)
-
-# Check if both conditions are satisfied
-if (is_entrez_unique &amp;&amp; is_hgnc_unique) {
-  print(&quot;Both columns have unique values.&quot;)
-} else {
-  print(&quot;Failed&quot;)
-}</code></pre>
-<pre><code>## [1] &quot;Both columns have unique values.&quot;</code></pre>
-<pre class="r"><code># Merge the table with HGNC symbols
+# Merge the table with HGNC symbols
 hgnc_tbl &lt;- merge(filtered_tbl, unique_hgnc_symbols, 
                   by.x = &quot;row.names&quot;, by.y = &quot;entrezgene_id&quot;, all=T)
 
@@ -2078,8 +2066,8 @@ unable to find the corresponding HUGO gene symbol. It seems that the
 majority of them are either outdated and thus no longer in the current
 gene set, or they are pseudogenes that do not encode functional
 proteins. Furthermore, each Entrez ID sometimes corresponds to multiple
-HGNC symbols, which means more some duplicates had to be removed from
-the dataset in order to have unique row names.</p>
+HGNC symbols, which means some duplicates had to be removed from the
+dataset in order to have unique row names.</p>
 <pre class="r"><code># remove rows that do not have HUGO symbol
 hgnc_tbl &lt;- hgnc_tbl[!(is.na(hgnc_tbl$hgnc_symbol)), ]
 
@@ -2290,8 +2278,10 @@ Gene ID, resulting in duplicate genes that had to be removed.</p>
 symbols?</strong><br />
 There were a few genes in the original dataset that likely had outdated
 Entrez Gene IDs, as <code>biomaRt</code> was unable to locate their HUGO
-symbol. After this conversion step from transcript to gene-level
-expression, 1896 genes were omitted from the dataset.<br />
+symbol. There was also the aforementioned issue with
+<code>biomaRt</code> returning multiple HGNC IDs for a single Entrez
+Gene ID. Overall, after the conversion step from transcript to
+gene-level expression, 1896 genes were omitted from the dataset.<br />
 </p>
 <p><strong>How many outliers were removed?</strong><br />
 I did not remove any sample outliers. As shown by the density and box
