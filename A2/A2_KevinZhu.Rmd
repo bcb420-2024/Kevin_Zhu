@@ -1,0 +1,69 @@
+---
+title: "BCB420 Assignment 2"
+author: "Kevin Zhu"
+output:
+  html_document:
+    df_print: paged
+    doc: yes
+    toc: true
+    theme: united
+  html_notebook: null
+---
+
+## Brief Overview of Assignment 1
+In Assignment #1, a dataset with GEO ID **GSE206102** was downloaded, cleaned,
+and normalized for subsequent analysis in the following assignments. The final 
+dataset coverage is 14244 genes; each condition ended up having four total 
+replicates following normalization.
+
+The RNA-seq experiment associated with this dataset was conducted over six 
+biological replicates of induced neuronal cells. There were three treatments: 
+control (0.6% DMSO), DAPT(40 uM), and LY411575(2.5 uM). The latter two 
+treatments were used to chronically inhibit γ-secretase. γ-secretase 
+inhibition is known to lowered cellular cholesterol ester levels and reduce
+endocytosis of the low-density lipoprotein receptor (LDLR). However, No studies 
+were carried out in human neurons. A more detailed overview about the dataset
+in the analysis can be found in the full write-up for Assignment #1.
+
+## Objective of Assignment 2
+The object for this assignment is to take the normalized expression data from 
+the previous Assignment #1 and rank the genes according ot differential 
+expression. Once this list ranked, thresholded over-representation analysis will
+be performed to highlight the dominant similarites in the top set of genes. 
+
+## Installing dependencies and dowloading the packages
+<br>
+These dependencies has are already included with the command in the docker file
+
+```{r, message=FALSE}
+
+if (!requireNamespace("BiocManager", quietly = TRUE)){
+  install.packages("BiocManager")}
+
+if (!requireNamespace("GEOmetadb", quietly = TRUE)){
+  BiocManager::install("GEOmetadb")}
+
+if (!requireNamespace("GEOmetadb", quietly = TRUE)){
+  install.packages("knitr")}
+
+if (!requireNamespace("edgeR", quietly = TRUE)){
+  BiocManager::install("edgeR")}
+
+if (!requireNamespace("biomaRt", quietly = TRUE)){
+  BiocManager::install("biomaRt")}
+
+if (!requireNamespace("DBI", quietly = TRUE)){
+  install.packages("DBI")}
+
+if (!requireNamespace("GEOquery", quietly = TRUE)){
+  BiocManager::install("GEOquery")}
+
+library(GEOquery)
+library(knitr)
+library(edgeR)
+library(biomaRt)
+library(dplyr)
+library(purrr)
+```
+
+## Differential Gene Expression
