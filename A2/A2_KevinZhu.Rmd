@@ -27,9 +27,10 @@ in the analysis can be found in the full write-up for Assignment #1.
 
 ## Objective of Assignment 2
 The object for this assignment is to take the normalized expression data from 
-the previous Assignment #1 and rank the genes according ot differential 
-expression. Once this list ranked, thresholded over-representation analysis will
-be performed to highlight the dominant similarites in the top set of genes. 
+the previous Assignment #1 and rank the genes according to differential 
+expression. Once this list ranked, over-representation analysis with thresholds
+will be performed to highlight the dominant similarities in the top set of 
+genes. 
 
 ## Installing dependencies and dowloading the packages
 <br>
@@ -64,6 +65,340 @@ library(edgeR)
 library(biomaRt)
 library(dplyr)
 library(purrr)
+library(ComplexHeatmap)
+library(ggplot2)
+library(circlize)
 ```
 
-## Differential Gene Expression
+## Step 1: Differential Gene Expression
+The first step for this assignment is to perform differential gene expression
+analysis.
+
+### Loading the normalized data
+We must load in the normalized data that was saved from the previous 
+assignment.
+
+```{r eval=TRUE}
+# rmarkdown::render("../A1/A1_KevinZhu.Rmd")
+
+samples_type <- read.table(file=file.path("../A1/GSE206102_samples_type.txt"),
+                                    header = TRUE,sep = "\t",
+                                    stringsAsFactors = FALSE,
+                                    check.names=FALSE)
+
+
+normalized_counts <- read.table(file=file.path(
+  "../A1/GSE206102_normalized_filtered_RSEM_counts.txt"
+  ),
+                                    header = TRUE,sep = "\t",
+                                    stringsAsFactors = FALSE,
+                                    check.names=FALSE)
+```
+
+### MDS
+
+
+We can look at the MDS plot below and see that the samples treated with LY411575
+and DAPT cluster fairly tightly and closely with each other. 
+
+```{r eval=TRUE}
+d <- DGEList(counts=as.matrix(normalized_counts), 
+            group=samples_type$treatment)
+
+plotMDS(d, labels=NULL, pch = 1, 
+        col = c("cyan", "red", "darkgreen")[
+          factor(samples_type$treatment)])  
+
+title(main = "MDS Plot by treatment")
+legend("topright", 
+       legend = levels(factor(samples_type$treatment)),
+       col = c("cyan", "red", "darkgreen"), 
+       pch = 1, 
+       cex = 0.7,
+       title = "Replicate number")
+```
+In the experiment, the tissue type, cell line, and cell type were identical for
+all the samples. Thus, we will look at the replicates to see if it is a factor
+that needs to be considered. 
+
+```{r eval=TRUE}
+samples_type <- samples_type %>%
+    mutate(replicate_number = 
+             as.numeric(gsub("Replicate([0-9]+)_.*", "\\1", title)))
+
+d <- DGEList(counts=as.matrix(normalized_counts), 
+            group=samples_type$replicate_number)
+
+plotMDS(d, labels=NULL, pch = 1, 
+        col = c("cyan", "red", "darkgreen", "black", "violet", "blue")[
+          factor(samples_type$replicate_number)])  
+
+title(main = "MDS Plot by replicate")
+legend("bottomright", 
+       legend = levels(factor(samples_type$replicate_number)),
+       col = c("cyan", "red", "darkgreen", "black", "violet", "blue"), 
+       pch = 1, 
+       cex = 0.7,
+       title = "Replicate number")
+```
+Note that not all of the data for each of the replicates is being used, due to 
+how the data was processed by GEO (explained in more detail in Assignment #1).
+However, even with the few scattered data points, we can still somewhat observe
+clustering of replicates 4, 5, and 6.
+
+Notice also that there are three treatments: control, LY411575, and DAPT. This 
+makes our subsequent analysis more difficult. However, as explained earlier in 
+this notebook, both LY411575 and DAPT are used to pharmaceutically induce 
+chronic γ-secretase inhibition. In order to maximize the number of samples we
+can use in this analysis, we can first try to combine the LY411575, and DAPT
+samples under "γ-secretase inhibition" to see if there are any obvious changes
+in the RNA-seq data compared to the control. Notably, the MDS plot reveals a 
+close clustering of DAPT and LY411575 samples, providing additional support for 
+the decision to combine these samples for further analysis.
+
+```{r eval=TRUE}
+samples_type <- samples_type %>%
+  mutate(new_treatment = ifelse(grepl("Vehicle", treatment), 
+                                "control", 
+                                "gamma_secretase_inhibition"))
+
+```
+
+### Designing the Model
+
+```{r eval=TRUE}
+model_design <- model.matrix(~ samples_type$replicate_number + 
+                               samples_type$new_treatment)
+
+d <- estimateDisp(d, model_design) # Estimate dispersion
+fit <- glmQLFit(d, model_design)
+```
+
+```{r eval=TRUE}
+# Perform significance test
+qlf.ctrl_vs_inhibit <- glmQLFTest(fit, coef=ncol(model_design)) 
+
+# Extract top hits from test
+tt_ctrl_vs_inhibit <- topTags(qlf.ctrl_vs_inhibit, n=nrow(d)) 
+
+# Extract results table
+top_outputs <- tt_ctrl_vs_inhibit$table 
+```
+
+```{r eval=TRUE}
+# Get indices of top outputs with p-value < 0.05
+sig_p_idx <- which(top_outputs$PValue < 0.05) 
+
+# Get indices of top outputs with FDR < 0.05
+sig_fdr_idx <- which(top_outputs$FDR < 0.05) 
+num_p <- length(sig_p_idx)
+num_fdr <- length(sig_fdr_idx)
+```
+
+### Volcano Plot
+```{r eval=TRUE}
+# Label top hits with differential expression status
+top_outputs$diffexpressed <- 
+  ifelse(top_outputs$logFC > 0.25 & top_outputs$FDR < 0.05, 
+         "Upregulated",
+         ifelse(top_outputs$logFC < -0.25 & top_outputs$FDR < 0.05, 
+                "Downregulated", 
+                "No change"))
+
+# Define colors based on differential expression status
+cols <- ifelse(top_outputs$logFC > 0.25 & top_outputs$FDR < 0.05, 
+               "cornflowerblue",
+               ifelse(top_outputs$logFC < -0.25 & top_outputs$FDR < 0.05, 
+                      "orange", 
+                      "grey"))
+
+# Create scatter plot
+ggplot(data = top_outputs, 
+       aes(x = logFC, y = -log10(FDR), col = diffexpressed)) + 
+  geom_point() + 
+  scale_color_manual(values = c("orange", "grey", "cornflowerblue")) + 
+  geom_hline(yintercept = -log10(0.05), col = "black", lty = 2) + 
+  geom_vline(xintercept = c(-0.25, 0.25), col = "black", lty = 2)
+```
+
+### Heatmap
+```{r eval=TRUE}
+# Get names of significant genes
+sig_genes <- rownames(top_outputs)[sig_fdr_idx] 
+
+# Get indices of significant genes in counts data
+sig_baseline_idx <- which(rownames(normalized_counts) %in% sig_genes) 
+
+# Scale the data
+scaled_hits_heatmap_matrix <- t(
+  scale(t(as.matrix(normalized_counts[sig_baseline_idx,])))) 
+
+# Create the colorscales based on if there are negative scaled count values
+if(min(scaled_hits_heatmap_matrix) < 0){
+  colscale <- colorRamp2(c(min(scaled_hits_heatmap_matrix), 
+                           0, max(scaled_hits_heatmap_matrix)),
+                           c("cornflowerblue", "white", "orange"))
+} else {
+  colscale <- colorRamp2(c(min(scaled_hits_heatmap_matrix), 
+                           max(scaled_hits_heatmap_matrix)), 
+                           c("white", "orange"))
+}
+
+
+
+# Create heatmap
+Heatmap(scaled_hits_heatmap_matrix,
+        cluster_rows = TRUE,
+        cluster_columns = TRUE,
+        show_row_dend=TRUE,
+        col = colscale,
+        show_column_names = TRUE,
+        show_row_names = FALSE,
+        show_heatmap_legend=TRUE)
+```
+
+## Thresholded overrepresentation analysis
+
+```{r eval=TRUE}
+# Get indices of significant upregulated and downregulated
+up_idx <- which(tt_ctrl_vs_inhibit$table$FDR < 0.01 & 
+                  tt_ctrl_vs_inhibit$table$logFC > 0)
+down_idx <- which(tt_ctrl_vs_inhibit$table$FDR < 0.01 & 
+                    tt_ctrl_vs_inhibit$table$logFC < 0)
+
+# Get gene names of upregulated genes
+upreg <- tt_ctrl_vs_inhibit$table[up_idx,]
+upreg_list <- rownames(upreg)
+
+# Get gene names of downregulated genes
+downreg <- tt_ctrl_vs_inhibit$table[down_idx,]
+downreg_list <- rownames(downreg)
+```
+
+```{r eval=TRUE}
+library(gprofiler2)
+
+# Query gprofiler for upregulated list
+gostres_up <- gost(query = upreg_list, 
+                organism = "hsapiens", significant = FALSE, exclude_iea = TRUE, 
+                correction_method = "fdr", 
+                domain_scope = "annotated", 
+                numeric_ns = "", sources = c("GO:BP", "REAC", "WP"))
+ 
+# Query gprofiler for downregulated list
+gostres_down <- gost(query = downreg_list, 
+                organism = "hsapiens", significant = FALSE, exclude_iea = TRUE, 
+                correction_method = "fdr", 
+                domain_scope = "annotated", 
+                numeric_ns = "", sources = c("GO:BP", "REAC", "WP"))
+
+# Query gprofiler for whole list
+gostres <-  gost(query = c(upreg_list, downreg_list), 
+                organism = "hsapiens", significant = FALSE, exclude_iea = TRUE, 
+                correction_method = "fdr", 
+                domain_scope = "annotated", 
+                numeric_ns = "", sources = c("GO:BP", "REAC", "WP"))
+
+num_genesets_up <- nrow(gostres_up$result)
+num_genesets_down <- nrow(gostres_down$result)
+num_genesets_all <- nrow(gostres$result)
+```
+
+```{r eval=TRUE}
+# Filter for terms with term_size <= 200
+filtered_gos_up <- gostres_up$result[which(gostres_up$result$term_size <= 200),]
+filtered_gos_down <- gostres_down$result[which(gostres_down$result$term_size <= 200),]
+filtered_gos <- gostres$result[which(gostres$result$term_size <= 200),]
+```
+
+
+```{r eval=TRUE}
+library(magrittr)
+library(kableExtra)
+
+filtered_gos_up[1:12,c("term_name", "p_value")] %>% 
+  kbl(caption="Table 1. Top filtered pathways hits for upregulated genes.", 
+      row.names = FALSE, digits = 32) %>% 
+  kable_styling()
+```
+
+```{r eval=TRUE}
+filtered_gos_down[1:12,c("term_name", "p_value")] %>% 
+  kbl(caption="Table 2. Top filtered pathways hits for downregulated genes.", 
+      row.names = FALSE, digits = 52) %>% 
+  kable_styling()
+```
+
+```{r eval=TRUE}
+filtered_gos[1:12, c("term_name", "p_value")] %>% 
+  kbl(caption="Table 3. Top filtered pathways hits for differentially expressed genes.", 
+      row.names = FALSE, digits = 32) %>% 
+  kable_styling()
+```
+
+## Interpretation
+The results from this analysis seem to closely match the results from the 
+original paper. Notably, the authors observed that all the unregulated genes 
+induced by chronic γ-secretase inhibition in human neuronal cells were 
+associated with cholesterol biosynthesis pathways (Figure 4E). As seen in the
+table above, the genes that were most significantly affected by the DAPT or 
+LY411575 treatment were those involved in the biosynthesis of cholesterol and 
+precursors. 
+
+Furthermore, the down-regulated genes were also described as being relatively 
+heterogeneous in terms of function and pathway (Figure 4G), suggesting a less 
+direct correlation with γ-secretase levels. This is also corroborated by the 
+g:Profiler analysis.
+
+Other sources of literature seems to support the conclusions in the paper. 
+"Inhibition of Cholesterol Biosynthesis Reduces γ-Secretase Activity and Amyloid-β Generation"
+identifies a converse relationship between γ-secretase and cholesterol biosynthesis.
+The authors of this paper depleted cholesterol using AY49944, which blocks the
+final step of cholesterol biosynthesis. The application of this diamine 
+demonstrated a notable reduction in γ-secretase activity, further reinforcing 
+the observed link between cholesterol metabolism and γ-secretase function. 
+
+
+## References
+\setlength{\parindent}{-0.2in}
+\setlength{\leftskip}{0.2in}
+\setlength{\parskip}{8pt}
+\noindent
+
+<div style="text-indent: -40px; padding-left: 40px;">
+Davis, S. and Meltzer, P. S. GEOquery: a bridge between the Gene Expression 
+Omnibus (GEO) and BioConductor. Bioinformatics, 2007, 14, 1846-1847
+
+Essayan-Perez, Sofia, and Thomas C Südhof. “Neuronal γ-Secretase Regulates 
+Lipid Metabolism, Linking Cholesterol to Synaptic Dysfunction in Alzheimer’s 
+Disease.” Neuron, vol. 111, no. 20, 1 Oct. 2023, pp. 3176-3194.e7, 
+https://doi.org/10.1016/j.neuron.2023.07.005.
+
+Robinson MD, McCarthy DJ and Smyth GK (2010). edgeR: a Bioconductor package for 
+differential expression analysis of digital gene expression data. 
+Bioinformatics 26, 139-140
+
+Mapping identifiers for the integration of genomic datasets with the 
+R/Bioconductor package biomaRt. Steffen Durinck, Paul T. Spellman, Ewan Birney 
+and Wolfgang Huber, Nature Protocols 4, 1184-1191 (2009).
+
+Martin, Fergal J., et al. “Ensembl 2023.” Nucleic Acids Research, 
+vol. 51, no. D1, 6 Jan. 2023, pp. D933–D941, pubmed.ncbi.nlm.nih.gov/36318249/, 
+https://doi.org/10.1093/nar/gkac958.
+  
+Wickham H, Henry L (2023). _purrr: Functional Programming Tools_. R package 
+version 1.0.2, https://github.com/tidyverse/purrr, 
+<https://purrr.tidyverse.org/>.
+
+Wickham H, François R, Henry L, Müller K, Vaughan D (2023). _dplyr: A Grammar 
+of Data Manipulation_. R package version 1.1.4, 
+<https://CRAN.R-project.org/package=dplyr>.
+  
+Yihui Xie (2015) Dynamic Documents with R and knitr. 2nd edition. Chapman and 
+Hall/CRC. ISBN 978-1498716963
+</div>
+
+
+
+
+

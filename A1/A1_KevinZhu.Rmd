@@ -166,6 +166,14 @@ for (col_name in colnames(tbl)) {
 
 samples_type <- samples_type[to_keep, ]
 
+write.table(samples_type, 
+            file.path(
+              getwd(),
+              paste(dataset_geo_id, 
+                    "samples_type.txt",sep="_")
+              ),
+            quote = FALSE,sep="\t",row.names = TRUE)
+
 head(tbl)
 ```
 
