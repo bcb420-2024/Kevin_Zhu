@@ -14,4 +14,4 @@ Link to the Wiki page: https://github.com/bcb420-2024/Kevin_Zhu/wiki
 # Assignments
 [Assignment 1](https://github.com/bcb420-2024/Kevin_Zhu/wiki/Assignment-1): [Notebook](https://github.com/bcb420-2024/Kevin_Zhu/blob/main/A1/A1_KevinZhu.html)
 
-[Assignment 2](https://github.com/bcb420-2024/Kevin_Zhu/wiki/Assignment-2): Notebook
+[Assignment 2](https://github.com/bcb420-2024/Kevin_Zhu/wiki/Assignment-2): [Notebook](https://github.com/bcb420-2024/Kevin_Zhu/blob/main/A2/A2_KevinZhu.html)
