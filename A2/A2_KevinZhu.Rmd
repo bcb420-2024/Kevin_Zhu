@@ -86,12 +86,13 @@ rmarkdown::render("../A1/A1_KevinZhu.Rmd")
 ```
 
 ```{r eval=TRUE}
+# read the file containing information about sample types 
 samples_type <- read.table(file=file.path("../A1/GSE206102_samples_type.txt"),
                                     header = TRUE,sep = "\t",
                                     stringsAsFactors = FALSE,
                                     check.names=FALSE)
 
-
+# read the file containing normalized and filtered counts 
 normalized_counts <- read.table(file=file.path(
   "../A1/GSE206102_normalized_filtered_RSEM_counts.txt"
   ),
@@ -110,17 +111,19 @@ and DAPT cluster fairly tightly and closely with each other.
 d <- DGEList(counts=as.matrix(normalized_counts), 
             group=samples_type$treatment)
 
+# plot multidimensional scaling (MDS) plot
 plotMDS(d, labels=NULL, pch = 1, 
         col = c("cyan", "red", "darkgreen")[
           factor(samples_type$treatment)])  
 
+# add legend and title to the plot
 title(main = "MDS Plot by treatment")
 legend("topright", 
        legend = levels(factor(samples_type$treatment)),
        col = c("cyan", "red", "darkgreen"), 
        pch = 1, 
        cex = 0.7,
-       title = "Replicate number")
+       title = "Treatment type")
 ```
 <br /> 
 In the experiment, the tissue type, cell line, and cell type were identical for
@@ -128,6 +131,7 @@ all the samples. Thus, we will look at the replicates to see if it is a factor
 that needs to be considered. 
 
 ```{r eval=TRUE}
+# create new replicate_number column in samples_type dataframe
 samples_type <- samples_type %>%
     mutate(replicate_number = 
              as.numeric(gsub("Replicate([0-9]+)_.*", "\\1", title)))
@@ -135,10 +139,12 @@ samples_type <- samples_type %>%
 d <- DGEList(counts=as.matrix(normalized_counts), 
             group=samples_type$replicate_number)
 
+# plot multidimensional scaling (MDS) plot
 plotMDS(d, labels=NULL, pch = 1, 
         col = c("cyan", "red", "darkgreen", "black", "violet", "blue")[
           factor(samples_type$replicate_number)])  
 
+# add legend and title to the plot
 title(main = "MDS Plot by replicate")
 legend("bottomright", 
        legend = levels(factor(samples_type$replicate_number)),
@@ -164,6 +170,7 @@ close clustering of DAPT and LY411575 samples, providing additional support for
 the decision to combine these samples for further analysis.
 
 ```{r eval=TRUE}
+# create new column to separate control vs gamma_secretase_inhibition
 samples_type <- samples_type %>%
   mutate(new_treatment = ifelse(grepl("Vehicle", treatment), 
                                 "control", 
@@ -173,32 +180,46 @@ samples_type <- samples_type %>%
 
 ### Designing the Model
 
+From the MDS plots, we can define a model based on replicate number and the 
+two treatment groups (control and γ-secretase inhibition). From there, we can
+fit the model to the data. 
+
 ```{r eval=TRUE}
 d <- DGEList(counts=as.matrix(normalized_counts), 
              group=samples_type$new_treatment)
+
+# design  model matrix using both replicate number and new treatment groups
 model_design <- model.matrix(~ samples_type$replicate_number +
                                samples_type$new_treatment)
 
-d <- estimateDisp(d, model_design) # Estimate dispersion
+# estimate dispersion
+d <- estimateDisp(d, model_design)
+
+# fit quasi-likelihood negative binomial generalized linear model to the data
 fit <- glmQLFit(d, model_design)
 ```
 
+We can then test for significance using this fitted model. 
+
 ```{r eval=TRUE}
-# Perform significance test
+# perform significance test
 qlf.ctrl_vs_inhibit <- glmQLFTest(fit, coef=ncol(model_design)) 
 
-# Extract top hits from test
+# extract top hits from test
 tt_ctrl_vs_inhibit <- topTags(qlf.ctrl_vs_inhibit, n=nrow(d)) 
 
-# Extract results table
+# extract results table
 top_outputs <- tt_ctrl_vs_inhibit$table 
 ```
 
+Next, we can identify the genes with p-values and FDR values that pass the 
+significance threshold.
+
 ```{r eval=TRUE}
-# Get indices of top outputs with p-value < 0.05
+# get indices of top outputs with p-value < 0.05
 sig_p_idx <- which(top_outputs$PValue < 0.05) 
 
-# Get indices of top outputs with FDR < 0.1
+# get indices of top outputs with FDR < 0.1
 sig_fdr_idx <- which(top_outputs$FDR < 0.1) 
 num_p <- length(sig_p_idx)
 num_fdr <- length(sig_fdr_idx)
@@ -212,7 +233,10 @@ We used False Discovery Rate (FDR) correction to address multiple hypotheses
 in this analysis. The preference for FDR over Bonferroni's correction stems from 
 its relatively less stringent nature, which allows us to keep a broader set of 
 significant genes. Notably, it is also the default setting in `glmQLFTest()` 
-function. Applying the standard significance threshold, this time considering 
+function. The threshold for FDR was set to 0.1 in this analysis, as it was 
+the value the authors used in the original paper (Essayan-Perez & Südhof 2024).
+
+Applying the standard significance threshold, this time considering 
 the FDR, our analysis identifies `r num_fdr` genes exhibiting significant 
 differential expression.
 
@@ -224,7 +248,7 @@ of these genes as upregulated or downregulated is determined by the sign of
 their respective log2 fold changes.
 
 ```{r eval=TRUE}
-# Label top hits with differential expression status
+# label top hits with differential expression status
 top_outputs$diffexpressed <- 
   ifelse(top_outputs$logFC > 0.25 & top_outputs$FDR < 0.1, 
          "Upregulated",
@@ -232,20 +256,21 @@ top_outputs$diffexpressed <-
                 "Downregulated", 
                 "No change"))
 
-# Define colors based on differential expression status
+# define colors based on differential expression status
 cols <- ifelse(top_outputs$logFC > 0.25 & top_outputs$FDR < 0.1, 
                "cornflowerblue",
                ifelse(top_outputs$logFC < -0.25 & top_outputs$FDR < 0.1, 
                       "orange", 
                       "grey"))
 
-# Create scatter plot
+# create scatter plot
 ggplot(data = top_outputs, 
        aes(x = logFC, y = -log10(FDR), col = diffexpressed)) + 
   geom_point() + 
   scale_color_manual(values = c("orange", "grey", "cornflowerblue")) + 
   geom_hline(yintercept = -log10(0.1), col = "black", lty = 2) + 
-  geom_vline(xintercept = c(-0.25, 0.25), col = "black", lty = 2)
+  geom_vline(xintercept = c(-0.25, 0.25), col = "black", lty = 2) +
+  ggtitle("Volcano Plot of Differential Expression")
 ```
 
 ### Heatmap
@@ -253,17 +278,17 @@ We can now generate a heatmap to illustrate the scaled differences in
 normalized RNA counts among the top hits.
 
 ```{r eval=TRUE}
-# Get names of significant genes
+# get names of significant genes
 sig_genes <- rownames(top_outputs)[sig_fdr_idx] 
 
-# Get indices of significant genes in counts data
+# get indices of significant genes in counts data
 sig_baseline_idx <- which(rownames(normalized_counts) %in% sig_genes) 
 
-# Scale the data
+# scale the data
 scaled_hits_heatmap_matrix <- t(
   scale(t(as.matrix(normalized_counts[sig_baseline_idx,])))) 
 
-# Create the colorscales based on if there are negative scaled count values
+# create the colorscales based on if there are negative scaled count values
 if(min(scaled_hits_heatmap_matrix) < 0){
   colscale <- colorRamp2(c(min(scaled_hits_heatmap_matrix), 
                            0, max(scaled_hits_heatmap_matrix)),
@@ -276,7 +301,7 @@ if(min(scaled_hits_heatmap_matrix) < 0){
 
 
 
-# Create heatmap
+# create heatmap
 Heatmap(scaled_hits_heatmap_matrix,
         cluster_rows = TRUE,
         cluster_columns = TRUE,
@@ -284,7 +309,9 @@ Heatmap(scaled_hits_heatmap_matrix,
         col = colscale,
         show_column_names = TRUE,
         show_row_names = FALSE,
-        show_heatmap_legend=TRUE)
+        show_heatmap_legend=TRUE,
+        name = "Scaled Expression"
+        )
 ```
 
 We can see in the heatmap above that the samples treated with DAPT and LY411575
@@ -297,39 +324,53 @@ conditions, which somewhat affirms our methodology.
 
 ## Thresholded overrepresentation analysis
 
+As shown below, we conducted a threshold gene set enrichment analysis on the top
+hits, using for `g:Profiler` as the tool of choice. This decision was driven by
+pre-existing familiarity with the interface. Furthermore, the use 
+of g:Profiler enables us to deduce enriched biological pathways and functional 
+annotations associated with top hits, enhancing the interpretation of our 
+analysis.
+
+The thresholded lists were generated based on an FDR < 0.01 and whether the log 
+fold change is greater than or less than zero, along with the entire list.
+
 ```{r eval=TRUE}
-# Get indices of significant upregulated and downregulated
+# get indices of significant upregulated and downregulated
 up_idx <- which(tt_ctrl_vs_inhibit$table$FDR < 0.01 & 
                   tt_ctrl_vs_inhibit$table$logFC > 0)
 down_idx <- which(tt_ctrl_vs_inhibit$table$FDR < 0.01 & 
                     tt_ctrl_vs_inhibit$table$logFC < 0)
 
-# Get gene names of upregulated genes
+# get gene names of upregulated genes
 upreg <- tt_ctrl_vs_inhibit$table[up_idx,]
 upreg_list <- rownames(upreg)
 
-# Get gene names of downregulated genes
+# get gene names of downregulated genes
 downreg <- tt_ctrl_vs_inhibit$table[down_idx,]
 downreg_list <- rownames(downreg)
 ```
 
+Using `g:Profiler` on the upregulated and downregulated lists, we can perform 
+a thresholded over-representation analysis to identify a number of pathways and
+genesets for each query. 
+
 ```{r eval=TRUE}
 
-# Query gprofiler for upregulated list
+# query gprofiler for upregulated list
 gostres_up <- gost(query = upreg_list, 
                 organism = "hsapiens", significant = FALSE, exclude_iea = TRUE, 
                 correction_method = "fdr", 
                 domain_scope = "annotated", 
                 numeric_ns = "", sources = c("GO:BP", "REAC", "WP"))
  
-# Query gprofiler for downregulated list
+# query gprofiler for downregulated list
 gostres_down <- gost(query = downreg_list, 
                 organism = "hsapiens", significant = FALSE, exclude_iea = TRUE, 
                 correction_method = "fdr", 
                 domain_scope = "annotated", 
                 numeric_ns = "", sources = c("GO:BP", "REAC", "WP"))
 
-# Query gprofiler for whole list
+# query gprofiler for whole list
 gostres <-  gost(query = c(upreg_list, downreg_list), 
                 organism = "hsapiens", significant = FALSE, exclude_iea = TRUE, 
                 correction_method = "fdr", 
@@ -341,19 +382,16 @@ num_genesets_down <- nrow(gostres_down$result)
 num_genesets_all <- nrow(gostres$result)
 ```
 
+Next, we can filter out terms that are too large, as they may obscure relevant
+pathways. Instead, we take only genesets with a term size that is less than or 
+equal to 200 (similar thresholds in the `g:Profiler` homework assignment).
+
 ```{r eval=TRUE}
-# Filter for terms with term_size <= 200
+# filter for terms with term_size <= 200
 filtered_gos_up <- gostres_up$result[which(gostres_up$result$term_size <= 200),]
 filtered_gos_down <- gostres_down$result[which(gostres_down$result$term_size <= 200),]
 filtered_gos <- gostres$result[which(gostres$result$term_size <= 200),]
 ```
-
-We conducted a threshold gene set enrichment analysis on the top hits, 
-using for `g:Profiler` as the tool of choice. This decision was driven by
-pre-existing familiarity with the interface. Furthermore, the use 
-of g:Profiler enables us to deduce enriched biological pathways and functional 
-annotations associated with top hits, enhancing the interpretation of our 
-analysis.
 
 This analysis incorporates GO biological process, Reactome, and WikiPathways 
 as annotation databases. This selections aligns with our goal on uncovering 
@@ -372,18 +410,21 @@ biologically relevant genesets within the enriched pathways and processes.
 
 
 ```{r eval=TRUE}
+# select first 12 rows and columns ("term_name" and "p_value") from data frame
 filtered_gos_up[1:12,c("term_name", "p_value")] %>% 
   kable(caption="Table 1. Top filtered pathways hits for upregulated genes.", 
       row.names = FALSE, digits = 32)
 ```
 
 ```{r eval=TRUE}
+# select first 12 rows and columns ("term_name" and "p_value") from data frame
 filtered_gos_down[1:12,c("term_name", "p_value")] %>% 
   kable(caption="Table 2. Top filtered pathways hits for downregulated genes.", 
       row.names = FALSE, digits = 52)
 ```
 
 ```{r eval=TRUE}
+# select first 12 rows and columns ("term_name" and "p_value") from data frame
 filtered_gos[1:12, c("term_name", "p_value")] %>% 
   kable(caption="Table 3. Top filtered pathways hits for differentially expressed genes.", 
       row.names = FALSE, digits = 32)
