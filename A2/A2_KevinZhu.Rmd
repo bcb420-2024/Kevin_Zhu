@@ -80,9 +80,12 @@ analysis.
 We must load in the normalized data that was saved from the previous 
 assignment.
 
-```{r eval=TRUE}
-# rmarkdown::render("../A1/A1_KevinZhu.Rmd")
+```{r results = "hide"}
+# ensures user does not need to manually run the previous notebook
+rmarkdown::render("../A1/A1_KevinZhu.Rmd")
+```
 
+```{r eval=TRUE}
 samples_type <- read.table(file=file.path("../A1/GSE206102_samples_type.txt"),
                                     header = TRUE,sep = "\t",
                                     stringsAsFactors = FALSE,

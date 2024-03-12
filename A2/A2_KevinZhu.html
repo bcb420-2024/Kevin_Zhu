@@ -1725,9 +1725,15 @@ expression analysis.</p>
 <h3>Loading the normalized data</h3>
 <p>We must load in the normalized data that was saved from the previous
 assignment.</p>
-<pre class="r"><code># rmarkdown::render(&quot;../A1/A1_KevinZhu.Rmd&quot;)
-
-samples_type &lt;- read.table(file=file.path(&quot;../A1/GSE206102_samples_type.txt&quot;),
+<pre class="r"><code># ensures user does not need to manually run the previous notebook
+rmarkdown::render(&quot;../A1/A1_KevinZhu.Rmd&quot;)</code></pre>
+<pre><code>## 
+## 
+## processing file: A1_KevinZhu.Rmd</code></pre>
+<pre><code>## output file: A1_KevinZhu.knit.md</code></pre>
+<pre><code>## 
+## Output created: A1_KevinZhu.html</code></pre>
+<pre class="r"><code>samples_type &lt;- read.table(file=file.path(&quot;../A1/GSE206102_samples_type.txt&quot;),
                                     header = TRUE,sep = &quot;\t&quot;,
                                     stringsAsFactors = FALSE,
                                     check.names=FALSE)
