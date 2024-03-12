@@ -34,9 +34,9 @@ genes.
 
 ## Installing dependencies and dowloading the packages
 <br>
-These dependencies has are already included with the command in the docker file
+These dependencies has are already included with the command in the docker file.
 
-```{r, message=FALSE}
+```{r setup, message=FALSE}
 
 if (!requireNamespace("BiocManager", quietly = TRUE)){
   install.packages("BiocManager")}
@@ -68,6 +68,8 @@ library(purrr)
 library(ComplexHeatmap)
 library(ggplot2)
 library(circlize)
+library(gprofiler2)
+library(magrittr)
 ```
 
 ## Step 1: Differential Gene Expression
@@ -93,10 +95,10 @@ normalized_counts <- read.table(file=file.path(
                                     header = TRUE,sep = "\t",
                                     stringsAsFactors = FALSE,
                                     check.names=FALSE)
+dim(normalized_counts)
 ```
 
 ### MDS
-
 
 We can look at the MDS plot below and see that the samples treated with LY411575
 and DAPT cluster fairly tightly and closely with each other. 
@@ -117,6 +119,7 @@ legend("topright",
        cex = 0.7,
        title = "Replicate number")
 ```
+<br /> 
 In the experiment, the tissue type, cell line, and cell type were identical for
 all the samples. Thus, we will look at the replicates to see if it is a factor
 that needs to be considered. 
@@ -141,6 +144,7 @@ legend("bottomright",
        cex = 0.7,
        title = "Replicate number")
 ```
+<br /> 
 Note that not all of the data for each of the replicates is being used, due to 
 how the data was processed by GEO (explained in more detail in Assignment #1).
 However, even with the few scattered data points, we can still somewhat observe
@@ -167,7 +171,9 @@ samples_type <- samples_type %>%
 ### Designing the Model
 
 ```{r eval=TRUE}
-model_design <- model.matrix(~ samples_type$replicate_number + 
+d <- DGEList(counts=as.matrix(normalized_counts), 
+             group=samples_type$new_treatment)
+model_design <- model.matrix(~ samples_type$replicate_number +
                                samples_type$new_treatment)
 
 d <- estimateDisp(d, model_design) # Estimate dispersion
@@ -189,26 +195,44 @@ top_outputs <- tt_ctrl_vs_inhibit$table
 # Get indices of top outputs with p-value < 0.05
 sig_p_idx <- which(top_outputs$PValue < 0.05) 
 
-# Get indices of top outputs with FDR < 0.05
-sig_fdr_idx <- which(top_outputs$FDR < 0.05) 
+# Get indices of top outputs with FDR < 0.1
+sig_fdr_idx <- which(top_outputs$FDR < 0.1) 
 num_p <- length(sig_p_idx)
 num_fdr <- length(sig_fdr_idx)
 ```
 
+In this analysis, we have chosen the typical significance threshold α=0.05; we 
+can see that `r num_p` genes exhibited statistically significant differential 
+expression (their p-values < 0.05).
+
+We used False Discovery Rate (FDR) correction to address multiple hypotheses 
+in this analysis. The preference for FDR over Bonferroni's correction stems from 
+its relatively less stringent nature, which allows us to keep a broader set of 
+significant genes. Notably, it is also the default setting in `glmQLFTest()` 
+function. Applying the standard significance threshold, this time considering 
+the FDR, our analysis identifies `r num_fdr` genes exhibiting significant 
+differential expression.
+
 ### Volcano Plot
+To concisely visualize our analysis, we can us a volcano plot, as shown below. 
+Within this plot, we emphasize genes of significance—those exhibiting an 
+FDR < 0.1 and an absolute log2 fold change exceeding 0.25. The classification 
+of these genes as upregulated or downregulated is determined by the sign of 
+their respective log2 fold changes.
+
 ```{r eval=TRUE}
 # Label top hits with differential expression status
 top_outputs$diffexpressed <- 
-  ifelse(top_outputs$logFC > 0.25 & top_outputs$FDR < 0.05, 
+  ifelse(top_outputs$logFC > 0.25 & top_outputs$FDR < 0.1, 
          "Upregulated",
-         ifelse(top_outputs$logFC < -0.25 & top_outputs$FDR < 0.05, 
+         ifelse(top_outputs$logFC < -0.25 & top_outputs$FDR < 0.1, 
                 "Downregulated", 
                 "No change"))
 
 # Define colors based on differential expression status
-cols <- ifelse(top_outputs$logFC > 0.25 & top_outputs$FDR < 0.05, 
+cols <- ifelse(top_outputs$logFC > 0.25 & top_outputs$FDR < 0.1, 
                "cornflowerblue",
-               ifelse(top_outputs$logFC < -0.25 & top_outputs$FDR < 0.05, 
+               ifelse(top_outputs$logFC < -0.25 & top_outputs$FDR < 0.1, 
                       "orange", 
                       "grey"))
 
@@ -217,11 +241,14 @@ ggplot(data = top_outputs,
        aes(x = logFC, y = -log10(FDR), col = diffexpressed)) + 
   geom_point() + 
   scale_color_manual(values = c("orange", "grey", "cornflowerblue")) + 
-  geom_hline(yintercept = -log10(0.05), col = "black", lty = 2) + 
+  geom_hline(yintercept = -log10(0.1), col = "black", lty = 2) + 
   geom_vline(xintercept = c(-0.25, 0.25), col = "black", lty = 2)
 ```
 
 ### Heatmap
+We can now generate a heatmap to illustrate the scaled differences in 
+normalized RNA counts among the top hits.
+
 ```{r eval=TRUE}
 # Get names of significant genes
 sig_genes <- rownames(top_outputs)[sig_fdr_idx] 
@@ -257,6 +284,14 @@ Heatmap(scaled_hits_heatmap_matrix,
         show_heatmap_legend=TRUE)
 ```
 
+We can see in the heatmap above that the samples treated with DAPT and LY411575
+all seem to cluster together, separate from the control samples. As mentioned 
+earlier, this behavior was expected as both treatments were intended to 
+pharmaceutically induce chronic γ-secretase inhibition; their 
+transcriptomes would be relatively similar. Notably, there is a distinct 
+difference in the expression of the top hits between the control and treated 
+conditions, which somewhat affirms our methodology. 
+
 ## Thresholded overrepresentation analysis
 
 ```{r eval=TRUE}
@@ -276,7 +311,6 @@ downreg_list <- rownames(downreg)
 ```
 
 ```{r eval=TRUE}
-library(gprofiler2)
 
 # Query gprofiler for upregulated list
 gostres_up <- gost(query = upreg_list, 
@@ -311,53 +345,85 @@ filtered_gos_down <- gostres_down$result[which(gostres_down$result$term_size <= 
 filtered_gos <- gostres$result[which(gostres$result$term_size <= 200),]
 ```
 
+We conducted a threshold gene set enrichment analysis on the top hits, 
+using for `g:Profiler` as the tool of choice. This decision was driven by
+pre-existing familiarity with the interface. Furthermore, the use 
+of g:Profiler enables us to deduce enriched biological pathways and functional 
+annotations associated with top hits, enhancing the interpretation of our 
+analysis.
+
+This analysis incorporates GO biological process, Reactome, and WikiPathways 
+as annotation databases. This selections aligns with our goal on uncovering 
+enriched biological pathways associated with the identified genes. Note that 
+electronic GO annotations were exluded to ensure that only high-quality 
+annotations were being used in our analysis. 
+
+Applying thresholds of FDR < 0.1, we identify `r num_genesets_up` genesets for 
+upregulated genes (logFC > 0), `r num_genesets_down` for downregulated genes 
+(logFC > 0), and `r num_genesets_all` for the combined list. Upon further 
+refinement by filtering for term sizes less than or equal to 200, our analysis 
+yields `r nrow(filtered_gos_up)` genesets for upregulated genes, 
+`r nrow(filtered_gos_down)` for downregulated genes, and `r nrow(filtered_gos)` 
+for the combined list. This step ensures a focus on more specific and 
+biologically relevant genesets within the enriched pathways and processes.
+
 
 ```{r eval=TRUE}
-library(magrittr)
-library(kableExtra)
-
 filtered_gos_up[1:12,c("term_name", "p_value")] %>% 
-  kbl(caption="Table 1. Top filtered pathways hits for upregulated genes.", 
-      row.names = FALSE, digits = 32) %>% 
-  kable_styling()
+  kable(caption="Table 1. Top filtered pathways hits for upregulated genes.", 
+      row.names = FALSE, digits = 32)
 ```
 
 ```{r eval=TRUE}
 filtered_gos_down[1:12,c("term_name", "p_value")] %>% 
-  kbl(caption="Table 2. Top filtered pathways hits for downregulated genes.", 
-      row.names = FALSE, digits = 52) %>% 
-  kable_styling()
+  kable(caption="Table 2. Top filtered pathways hits for downregulated genes.", 
+      row.names = FALSE, digits = 52)
 ```
 
 ```{r eval=TRUE}
 filtered_gos[1:12, c("term_name", "p_value")] %>% 
-  kbl(caption="Table 3. Top filtered pathways hits for differentially expressed genes.", 
-      row.names = FALSE, digits = 32) %>% 
-  kable_styling()
+  kable(caption="Table 3. Top filtered pathways hits for differentially expressed genes.", 
+      row.names = FALSE, digits = 32)
 ```
+
+We can observe from the three tables above that the pathways associated with the 
+upregulated genes seem to be the ones that primarily reappear when performing 
+the analysis on the entire list of genes. This may be because the upregulated 
+genes all seem to be associated with biosynthesis pathways, particularly those 
+related to cholesterol and its precursors. In contrast, the downregulated genes 
+exhibit a more diverse involvement in various pathways. This heterogeneity in 
+pathways among downregulated genes likely muddles the signal when performing 
+the thresholded analysis over all the genes, which may be why we see different 
+results. 
 
 ## Interpretation
 The results from this analysis seem to closely match the results from the 
-original paper. Notably, the authors observed that all the unregulated genes 
-induced by chronic γ-secretase inhibition in human neuronal cells were 
-associated with cholesterol biosynthesis pathways (Figure 4E). As seen in the
-table above, the genes that were most significantly affected by the DAPT or 
-LY411575 treatment were those involved in the biosynthesis of cholesterol and 
-precursors. 
+original paper (Essayan-Perez & Südhof 2024). Notably, the authors observed that 
+all the unregulated genes induced by chronic γ-secretase inhibition in human 
+neuronal cells were associated with cholesterol biosynthesis pathways 
+(Figure 4E). As seen in the table above, the genes that were most significantly 
+affected by the DAPT or LY411575 treatment were those involved in the 
+biosynthesis of cholesterol and precursors. 
 
+
+![Figure 4E and 4G from the paper "Neuronal γ-secretase regulates lipid metabolism, linking cholesterol to synaptic dysfunction in Alzheimer’s disease" (Essayan-Perez & Südhof 2024).](4E_G.jpg)
+
+<br /> 
 Furthermore, the down-regulated genes were also described as being relatively 
 heterogeneous in terms of function and pathway (Figure 4G), suggesting a less 
 direct correlation with γ-secretase levels. This is also corroborated by the 
 g:Profiler analysis.
 
-Other sources of literature seems to support the conclusions in the paper. 
-"Inhibition of Cholesterol Biosynthesis Reduces γ-Secretase Activity and Amyloid-β Generation"
-identifies a converse relationship between γ-secretase and cholesterol biosynthesis.
-The authors of this paper depleted cholesterol using AY49944, which blocks the
-final step of cholesterol biosynthesis. The application of this diamine 
-demonstrated a notable reduction in γ-secretase activity, further reinforcing 
-the observed link between cholesterol metabolism and γ-secretase function. 
 
+Other sources of literature seems to support the conclusions in the paper. In 
+"Inhibition of Cholesterol Biosynthesis Reduces γ-Secretase Activity and 
+Amyloid-β Generation," (Kim et al., 2016), a relationship between γ-secretase 
+and cholesterol biosynthesis is similarly identified, although in the inverse 
+direction. More specifically, the authors of the paper depleted cholesterol 
+using AY49944, which blocks the final step of cholesterol biosynthesis. The 
+application of this diamine demonstrated a notable reduction in γ-secretase 
+activity, further reinforcing the observed link between cholesterol metabolism 
+and γ-secretase function. 
 
 ## References
 \setlength{\parindent}{-0.2in}
@@ -366,6 +432,10 @@ the observed link between cholesterol metabolism and γ-secretase function.
 \noindent
 
 <div style="text-indent: -40px; padding-left: 40px;">
+Bache S, Wickham H (2022). _magrittr: A Forward-Pipe Operator for R_. R package 
+version 2.0.3, https://github.com/tidyverse/magrittr, 
+<https://magrittr.tidyverse.org>.
+
 Davis, S. and Meltzer, P. S. GEOquery: a bridge between the Gene Expression 
 Omnibus (GEO) and BioConductor. Bioinformatics, 2007, 14, 1846-1847
 
@@ -374,17 +444,34 @@ Lipid Metabolism, Linking Cholesterol to Synaptic Dysfunction in Alzheimer’s
 Disease.” Neuron, vol. 111, no. 20, 1 Oct. 2023, pp. 3176-3194.e7, 
 https://doi.org/10.1016/j.neuron.2023.07.005.
 
-Robinson MD, McCarthy DJ and Smyth GK (2010). edgeR: a Bioconductor package for 
-differential expression analysis of digital gene expression data. 
-Bioinformatics 26, 139-140
+Gu Z, Eils R, Schlesner M (2016). “Complex heatmaps reveal patterns and 
+correlations in multidimensional genomic data.” Bioinformatics. 
+doi:10.1093/bioinformatics/btw313.
 
-Mapping identifiers for the integration of genomic datasets with the 
-R/Bioconductor package biomaRt. Steffen Durinck, Paul T. Spellman, Ewan Birney 
-and Wolfgang Huber, Nature Protocols 4, 1184-1191 (2009).
+Gu Z (2022). “Complex Heatmap Visualization.” iMeta. doi:10.1002/imt2.43.
+
+Gu Z, Gu L, Eils R, Schlesner M, Brors B (2014). “circlize implements and 
+enhances circular visualization in R.” Bioinformatics, 30, 2811-2812.
+
+Kim, Y., Kim, C., Jang, H. Y., & Mook-Jung, I. (2016). Inhibition of 
+cholesterol biosynthesis reduces γ-secretase activity and amyloid-β generation. 
+Journal of Alzheimer’s Disease, 51(4), 1057–1068. 
+https://doi.org/10.3233/jad-150982 
+
+Kolberg L, Raudvere U, Kuzmin I, Vilo J, Peterson H (2020). “gprofiler2– an 
+R package for gene list functional enrichment analysis and namespace conversion 
+toolset g:Profiler.” F1000Research, 9 (ELIXIR)(709). R package version 0.2.3.
 
 Martin, Fergal J., et al. “Ensembl 2023.” Nucleic Acids Research, 
 vol. 51, no. D1, 6 Jan. 2023, pp. D933–D941, pubmed.ncbi.nlm.nih.gov/36318249/, 
 https://doi.org/10.1093/nar/gkac958.
+
+Robinson MD, McCarthy DJ and Smyth GK (2010). edgeR: a Bioconductor package for 
+differential expression analysis of digital gene expression data. 
+Bioinformatics 26, 139-140
+
+Wickham H (2016). ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag 
+New York. ISBN 978-3-319-24277-4, https://ggplot2.tidyverse.org.
   
 Wickham H, Henry L (2023). _purrr: Functional Programming Tools_. R package 
 version 1.0.2, https://github.com/tidyverse/purrr, 
@@ -396,9 +483,9 @@ of Data Manipulation_. R package version 1.1.4,
   
 Yihui Xie (2015) Dynamic Documents with R and knitr. 2nd edition. Chapman and 
 Hall/CRC. ISBN 978-1498716963
+
+Mapping identifiers for the integration of genomic datasets with the 
+R/Bioconductor package biomaRt. Steffen Durinck, Paul T. Spellman, Ewan Birney 
+and Wolfgang Huber, Nature Protocols 4, 1184-1191 (2009).
 </div>
-
-
-
-
 
