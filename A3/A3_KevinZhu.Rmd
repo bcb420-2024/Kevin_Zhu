@@ -84,6 +84,9 @@ if(! requireNamespace("httr")){
 if(! requireNamespace("fgsea")){
   install.packages("fgsea")}
 
+if(! requireNamespace("GSA")){
+  BiocManager::install("GSA")}
+
 library(GEOquery)
 library(knitr)
 library(edgeR)
@@ -99,9 +102,10 @@ library(RCy3)
 library(httr)
 library(RCurl)
 library(fgsea)
+library(GSA)
 ```
 
-## Step 1: Non-thresholded Gene set Enrichment Analysis
+## Non-thresholded Gene set Enrichment Analysis
 The first step for this assignment is to perform non-thresholded gene set 
 enrichment analysis
 
@@ -142,6 +146,9 @@ if(! file.exists(geneset_file)){
 }
 ```
 
+Next, we calculate the ranks of each differentially-expressed gene and order 
+them in descending order to create a ranked gene list.
+
 ```{r eval=TRUE}
 # Get results from differential expression analysis in Assignment 2
 de_df <- read.table(file = "top_outputs.txt", header = TRUE, sep = "\t")
@@ -159,18 +166,12 @@ if(! file.exists("a3_ranked.rnk")){
 }
 ```
 
+### Run GSEA
+
+Now that we have the ranked list and gene set ready, we can perform GSEA. Note
+that in order to run GSEA on R, we will be using the `fgsea` package. 
 ```{r eval=TRUE}
 run_gsea = TRUE # Set to TRUE if running GSEA
-working_dir <- getwd() # Get path of working directory to download items
-
-# Create path to GSEA shell script
-gsea_jar <- file.path(working_dir, "GSEA_4.3.2/gsea-cli.sh")
-
-# Set path to the GSEA directory as blank for automatic detection
-gsea_directory = ""
-
-analysis_name <- "control vs gamma_secretase_inhibition" # Set analysis name
-rnk_file <- "a3_ranked.rnk" # Set name of pre-ranked file
 ```
 
 ```{r eval=TRUE}
@@ -192,6 +193,11 @@ if (run_gsea) {
 }
 
 ```
+
+Note that the output from `fgsea` is different from the output we would expect
+from the original `GSEA` application. Thus, we must parse the output from 
+`fgsea` so that we have two files: one for the results with NES > 0 and one for 
+the results with NES < 0.
 
 ```{r eval=TRUE}
 format_fgsea_results <- function(current_fgsea_results, current_ranks) {
@@ -241,10 +247,32 @@ write.table(top_pathways_neg,
 
 ```
 
+Table 1: Top enriched pathways for γ-secretase inhibition group
 ```{r echo=FALSE}
 fgseaRes[NES > 0][order(fgseaRes[NES > 0]$padj), ]
+```
+Table 2: Top enriched pathways for non γ-secretase inhibition group
+```{r echo=FALSE}
 fgseaRes[NES < 0][order(fgseaRes[NES > 0]$padj), ]
 ```
+In general, we see significant enrichment in pathways that govern metabolic 
+processes in the γ-secretase inhibition group, specifically in regards to 
+cholesterol biosynthesis. Interestingly, this matches closely to 
+what was observed in the ORA results in the previous assignment, with many of 
+the up-regulated pathways also relating to cholesterol production. Furthermore, 
+there seems to be enriched pathways for the control group that are related to 
+catalytic processes such as glycolysis. These patterns were observed in the ORA
+results for a few of the down-regulated genes. Overall, This may imply that 
+there is a strong pre-existing signal that could be captured by both 
+methodologies. 
+
+That said, this comparison is not very straightforward, as the the gene sets 
+used in each method are not identical. More specifically, this analysis relies
+on the BaderLab gene sets from March 2024, which were curated from multiple 
+sources. However, the over-representation analysis used the GO biological 
+process, Reactome, and WikiPathways as annotation databases. Therefore, the 
+conclusions we have reached rely on a qualitative assessment of gene set names 
+rather than a thorough quantitative analysis.
 
 ## Visualize Gene set Enrichment Analysis using Cytoscape
 
@@ -252,10 +280,11 @@ The resulting map has 204 nodes and 3865 edges. The node cutoff used for this
 network is FDR Q-value of 0.01, while the edge similarity cutoff was set to
 0.375. Below showcases the map without manual layout manipulation.
 
-![Figure 1. Enrichment map showing γ-secretase inhibition vs. control with threshold FDR at 0.01](network_prelayout.png)
+![Figure 1. Enrichment map showing γ-secretase inhibition vs. control with threshold FDR at 0.005](./figs/network_prelayout.png)
 
 
-The parameters used to annotate the network was kept as default. Notably, each 
+<br /> 
+The parameters used to annotate the network were kept as default. Notably, each 
 node indicates a pathway, with its size indicating the number of genes. The
 color of the node indicates the phenotype that the pathway is enriched for:
 red indicates γ-secretase inhibition, while blue indicates the control group. 
@@ -265,17 +294,203 @@ pathways and its weight represents the number in common.
 After this step, we can annotate our network to visualize the pathways that 
 cluster together following this analysis. 
 
-![Figure 2. Annotated enrichment map showing the clustered genesets](grouped_network.png)
+![Figure 2. Annotated enrichment map showing the clustered genesets](./figs/grouped_network.png)
 
-The major themes found in this clusted enrichment map seem to be processes 
+
+<br /> 
+The major themes found in this clustered enrichment map seem to be processes 
 governing metabolism, with a notably inclusion of pathways that all seem to 
-be involved in cholesterol biosynthesis. This is unsurprising given what the 
+be involved in cholesterol metabolism This is unsurprising given what the 
 conclusions are from the original paper. Furthermore, each cluster seems to 
 only contain a single category (either the γ-secretase inhibition or control),
-which implies that the clusters fit will with the model. 
+which implies that the clusters fit with the model. 
 
-## Interpretation and Post-Analysis:
+## Interpretation and detailed view of results:
 
+The results from this analysis seems to be mostly in agreement with the findings
+from the original paper (Essayan-Perez & Südhof 2024). The authors noted a 
+consistent trend wherein all up-regulated genes induced by prolonged γ-secretase 
+inhibition in human neuronal cells were linked with cholesterol biosynthesis 
+processes. Notably, the GSEA results underscore the significant enrichment of 
+pathways related to cholesterol biosynthesis within the γ-secretase inhibition 
+group. These results were further corroborated by the annotated gene enrichment
+maps, where pathways associated fatty acid synthesis and cholesterol 
+metabolism all seem to cluster closely together. 
+
+When comparing our results with the ORA from the previous assignment, we find 
+that the majority of enrichments are consistent between the two methods. As 
+expected, we see that both methods identify genes and pathways that are involved
+in cholesterol biosynthesis and metabolism. 
+
+Interestingly, when looking at the control group, the GSEAS results and 
+Cytoscape visualizations seem to indicate a general enrichment in pathways 
+associated with catabolic pathways, such as glycolysis. Notably, glycolytic 
+processes were identified as a top pathways hit for downregulated genes in the
+ORA from the previous assignment. However, in general, the ORA results did not 
+seem to identify any clear trends in the down-regulated genes, exhibiting
+heterogeneous involvement in a diverse set of pathways. 
+
+These catabolic pathways were not explored in the paper, as the authors seemed 
+primarily interested in how γ-secretase specifically affects cholesterol 
+metabolism. Perhaps more work in the future can look at how catabolic pathways 
+are specifically affect by levels of γ-secretase, and their subsequent impact 
+on Alzheimer's disease. 
+
+Additional sources of literature appear to corroborate the findings presented 
+in the paper and our analysis. In "Inhibition of Cholesterol Biosynthesis 
+Reduces γ-Secretase Activity and Amyloid-β Generation" (Kim et al., 2016), a 
+relationship between γ-secretase and cholesterol biosynthesis is similarly 
+highlighted, albeit in an inverse manner. Specifically, the authors of the 
+study depleted cholesterol using AY49944, a compound that impedes the final 
+step of cholesterol biosynthesis. The administration of this diamine resulted 
+in a significant reduction in γ-secretase activity, thereby reinforcing the 
+observed association between cholesterol metabolism and γ-secretase function.
+
+Furthermore, in "β-amyloid monomers drive up neuronal aerobic glycolysis in 
+response to energy stressors" (Santangelo et al., 2021), γ-secretase inhibitor 
+IX was to blocking Aβ production, which seemed to severely hinder glucose 
+uptake into the neuronal cells, resulting in limited aerobic glycloysis. It is
+hypothesized that loss of aerobic glycolysis may accelerate Alzheimer’s disease 
+pathology. Overall, this seems to support our findings that catabolic pathways 
+such as glycolytic processes are down-regulated in the γ-secretase inhibition 
+group. 
+
+### Dark Matter Analysis
+
+Occasionally, the most interesting insights come from genes that lack existing 
+information. In this analysis, we will be exploring genes exhibiting 
+significant differential expression yet lack pathway annotations.
+
+```{r eval=TRUE}
+# Read in the gene set
+capture.output(genesets <- GSA.read.gmt(geneset_file), file="gsa_load.out")
+names(genesets$genesets) <- genesets$geneset.names
+```
+
+Next, we will identify the genes exhibiting noteworthy differential expression. 
+In our context, significance will be delineated by an FDR threshold of below 
+0.1. Following that, we will derive two gene lists from the analysis. 
+Initially, we will compile a roster of genes associated with the pathways 
+identified as enriched in our GSEA analysis. Additionally, we will retrieve the 
+complete list of genes.
+
+```{r eval=TRUE}
+diff_expr_genes <- rownames(de_df[de_df$FDR < 0.1, ])
+
+# Get all genes in enriched pathways
+genes_enr_gs <- c()
+for(i in 1:length(fgseaRes)){ # For every pathway in the enriched pathways
+  
+  # Get the genes that are in the pathway
+  current_geneset <- unlist(genesets$genesets[which(genesets$geneset.names %in% fgseaRes[i])])
+  genes_enr_gs <- union(genes_enr_gs, current_geneset)
+}
+
+# Get list of unique genes in the entire gene set
+all_genes_gs <- unique(unlist(genesets$genesets))
+```
+
+From the acquired gene lists, we proceed to extract the significantly 
+differentially expressed genes that are absent from both of the gene lists 
+generated in the prior step.
+
+```{r eval=TRUE}
+# Get set of significantly differentially expressed genes not included anywhere in the geneset
+no_annot <- setdiff(diff_expr_genes, all_genes_gs) 
+# Get set of significantly differentially expressed genes not included in the enriched pathways
+no_enr_annot <- setdiff(diff_expr_genes, fgseaRes)
+```
+
+Finally, we can produce the heatmaps for the dark matter genes.
+
+```{r eval=TRUE}
+# Get expression data 
+expression <- read.table("GSE206102_normalized_filtered_RSEM_counts.txt", 
+                         stringsAsFactors=FALSE)
+
+# Get indices of significantly differentially expressed genes 
+# not included anywhere in the geneset in the expression data
+# no_annot_ind <- which(expression$Gene %in% no_annot) 
+no_annot_ind <- which(rownames(expression) %in% no_annot)
+
+# Scale the data
+no_annot_matrix <- t(
+  scale(t(as.matrix(expression[no_annot_ind,])))) 
+
+# Create the colorscales based on if there are negative scaled count values
+if(min(no_annot_matrix) < 0){
+  colscale <- colorRamp2(c(min(no_annot_matrix), 0, max(no_annot_matrix)),
+                           c("cornflowerblue", "white", "orange"))
+} else {
+  colscale <- colorRamp2(c(min(no_annot_matrix), max(no_annot_matrix)), 
+                           c("white", "orange"))
+}
+
+# Create heatmap
+Heatmap(no_annot_matrix,
+        cluster_rows = TRUE,
+        cluster_columns = TRUE,
+        show_row_dend=TRUE,
+        col = colscale,
+        show_column_names = TRUE,
+        show_row_names = FALSE,
+        show_heatmap_legend=TRUE)
+
+```
+
+```{r eval=TRUE}
+# Set of significantly differentially expressed genes not included anywhere in the geneset
+no_annot
+```
+
+Visinin-like 1 emerges from the short list of dark matter genes that are not 
+included anywhere in the geneset. Interestingly, it is a known peripheral 
+biomarker for Alzheimer's disease (AD). It is worth noting that the non-control 
+cells exclusively underwent treatment with γ-secretase inhibitors. Thus, the 
+presence of VSNL1 in the list of highly differentially expressed genes 
+underscores the potential impact of γ-secretase on pathways beyond cholesterol 
+biosynthesis that are relevant to AD.
+
+```{r eval=TRUE}
+# Get indices of significantly differentially expressed genes 
+# not included anywhere in the enriched gene lists in the expression data
+no_expr_annot_ind <- which(rownames(expression) %in% no_enr_annot)
+
+# Scale the data
+no_expr_annot_matrix <- t(
+  scale(t(as.matrix(expression[no_expr_annot_ind, ])))) 
+
+# Create the colorscales based on if there are negative scaled count values
+if(min(no_expr_annot_matrix) < 0){
+  colscale <- colorRamp2(c(min(no_expr_annot_matrix), 0, max(no_expr_annot_matrix)),
+                           c("cornflowerblue", "white", "orange"))
+} else {
+  colscale <- colorRamp2(c(min(no_expr_annot_matrix), max(no_expr_annot_matrix)), 
+                           c("white", "orange"))
+}
+
+# Create heatmap
+Heatmap(no_expr_annot_matrix,
+        cluster_rows = TRUE,
+        cluster_columns = TRUE,
+        show_row_dend=TRUE,
+        col = colscale,
+        show_column_names = TRUE,
+        show_row_names = FALSE,
+        show_heatmap_legend=TRUE)
+```
+
+```{r eval=TRUE}
+# Set of significantly differentially expressed genes not included in the enriched pathways
+no_enr_annot
+```
+
+From the set of significantly differentially expressed genes not included in 
+the enriched pathways, we find LDLR: Low-Density Lipoprotein Receptor. It is 
+traditionally recognized for its role in regulating cholesterol 
+metabolism but is garnering attention in Alzheimer's disease (AD) research. Its 
+involvement may extend beyond lipid regulation, potentially influencing amyloid 
+beta (Aβ) metabolism and neuronal function.
 
 ## References
 \setlength{\parindent}{-0.2in}
