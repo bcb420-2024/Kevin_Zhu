@@ -124,7 +124,8 @@ geneset_file <-
 if(! file.exists(geneset_file)){
   
   # URL to get most recent gene set
-  gmt_url = "http://download.baderlab.org/EM_Genesets/current_release/Human/symbol/"
+  gmt_url = 
+    "http://download.baderlab.org/EM_Genesets/current_release/Human/symbol/"
 
   # Connect to URL and get html version of the page
   filenames = getURL(gmt_url)
@@ -133,8 +134,10 @@ if(! file.exists(geneset_file)){
   close(tc)
   
   # Create regular expression that will match the relevant file on the html page
-  rx = gregexpr("(?<=<a href=\")(.*.GOBP_AllPathways_noPFOCR_no_GO_iea.*.)(.gmt)(?=\">)", contents,
-                perl = TRUE)
+  rx = gregexpr(
+    "(?<=<a href=\")(.*.GOBP_AllPathways_noPFOCR_no_GO_iea.*.)(.gmt)(?=\">)", 
+    contents,
+    perl = TRUE)
   
   # Get file names that match the regular expression
   gmt_file = unlist(regmatches(contents, rx))
@@ -151,7 +154,7 @@ user has not run any of the previous notebooks, this code block should
 create the files necessary to run everything properly. 
 ```{r results = "hide"}
 # ensures user does not need to manually run the previous notebook
-rmarkdown::render("./A2_KevinZhu.Rmd")
+# rmarkdown::render("./A2_KevinZhu.Rmd")
 ```
 
 Next, we calculate the ranks of each differentially-expressed gene and order 
@@ -159,11 +162,11 @@ them in descending order to create a ranked gene list.
 
 ```{r eval=TRUE}
 # Get results from differential expression analysis in Assignment 2
-de_df <- read.table(file = "./A2/top_outputs.txt", header = TRUE, sep = "\t")
+top_outputs <- read.table(file = "./A2/top_outputs.txt", header = TRUE, sep = "\t")
 
 # Create ranked dataframe
-ranked_list <- data.frame(GeneName = rownames(de_df), 
-                          rank = -log(de_df$PValue, base = 10) * sign(de_df$logFC))
+ranked_list <- data.frame(GeneName = rownames(top_outputs), 
+                          rank = -log(top_outputs$PValue, base = 10) * sign(top_outputs$logFC))
 
 # Ordered ranked dataframe in descending order by rank
 ranked_list <- ranked_list[order(-ranked_list$rank),]
@@ -199,7 +202,6 @@ if (run_gsea) {
                     minSize  = 15,
                     maxSize  = 200,
                     nperm = 1000)
-  
 }
 
 ```
@@ -211,31 +213,30 @@ the results with NES < 0.
 
 ```{r eval=TRUE}
 format_fgsea_results <- function(current_fgsea_results, current_ranks) {
-    # Calculate the rank at max
-    # fgsea returns the leading edge. Just need to extract the highest rank from 
-    # set to get the rank at max
-    calculated_rank_at_max <- apply(current_fgsea_results, 1, FUN = function(x) { 
-        max(which(names(current_ranks) %in% unlist(x[8])))
+  # fgsea identifies the leading edge. 
+  # Extract the highest rank from the set to obtain the maximum rank
+  calculated_rank_at_max <- apply(current_fgsea_results, 1, FUN = function(x){
+    max(which(names(current_ranks) %in% unlist(x[8])))
     })
-    
-    # The last column is a comma-separated list of genes that are found in the leading edge.
-    # (Technically GSEA doesn't need this and the column will be ignored,
-    # but you have to put something in that column, might as put something that might be useful)
-    gsea_results <- cbind(current_fgsea_results$pathway,
-                          current_fgsea_results$pathway,
-                          "Details ...",
-                          current_fgsea_results$size,
-                          current_fgsea_results$ES,
-                          current_fgsea_results$NES,
-                          current_fgsea_results$pval,
-                          current_fgsea_results$padj,
-                          0,
-                          calculated_rank_at_max,
-                          apply(current_fgsea_results, 1, FUN = function(x) {
-                              paste(unlist(x[8]), collapse = ",")
-                          })) 
-    
-    colnames(gsea_results) <- c("name", "description", "GS DETAILS", "SIZE", 
+  
+  # Final column contains comma-separated list of genes in the leading edge
+  # GSEA technically will disregard this column 
+  gsea_results <- cbind(current_fgsea_results$pathway,
+                        current_fgsea_results$pathway,
+                        "Details ...",
+                        current_fgsea_results$size,
+                        current_fgsea_results$ES,
+                        current_fgsea_results$NES,
+                        current_fgsea_results$pval,
+                        current_fgsea_results$padj,
+                        0,
+                        calculated_rank_at_max,
+                        apply(current_fgsea_results, 1, FUN = function(x) {
+                          paste(unlist(x[8]), collapse = ",")
+                          })
+                        ) 
+  # Rename columns
+  colnames(gsea_results) <- c("name", "description", "GS DETAILS", "SIZE", 
                                 "ES", "NES", "pval", "padj", "FWER", 
                                 "Rank at Max", "leading edge genes")
     
@@ -245,6 +246,7 @@ format_fgsea_results <- function(current_fgsea_results, current_ranks) {
 top_pathways_pos <- format_fgsea_results(fgseaRes[NES > 0], rank_stats)
 top_pathways_neg <- format_fgsea_results(fgseaRes[NES < 0], rank_stats)
 
+# Write tables as to file so we can use Cytoscape later
 write.table(top_pathways_pos, 
             file = "./A3/gsea_report_for_na_pos.tsv", sep = "\t", 
             row.names = FALSE,
@@ -385,7 +387,7 @@ identified as enriched in our GSEA analysis. Additionally, we will retrieve the
 complete list of genes.
 
 ```{r eval=TRUE}
-diff_expr_genes <- rownames(de_df[de_df$FDR < 0.1, ])
+diff_expr_genes <- rownames(top_outputs[top_outputs$FDR < 0.1, ])
 
 # Get all genes in enriched pathways
 genes_enr_gs <- c()
@@ -452,6 +454,12 @@ Heatmap(no_annot_matrix,
 no_annot
 ```
 
+Despite using very few genes, this heatmap still seems to able to cluster the
+samples treated with DAPT and LY411575 together, separate from the control 
+samples. Thus, these highly differentially expressed genes lack annotations but 
+still may play important roles in pathways related to Alzheimer's disease,
+disorders in cholesterol transport/metabolism, or other diseases.
+
 Visinin-like 1 emerges from the short list of dark matter genes that are not 
 included anywhere in the geneset. Interestingly, it is a neuronal calcium-sensor 
 protein, but is also known as a peripheral biomarker for Alzheimer's disease 
@@ -494,6 +502,12 @@ Heatmap(no_expr_annot_matrix,
 # Set of significantly differentially expressed genes not included in the enriched pathways
 no_enr_annot
 ```
+
+Yet again, we can see in the heatmap above that the samples treated with 
+the γ-secretase inhibitors, DAPT and LY411575, seem to cluster together. 
+This behavior showcases that the dark matter genes, despite not showing up in 
+the pathways in our analysis, are likely involved in other processes that may be
+related to cholesterol metabolism and Alzheimer's disease. 
 
 From the set of significantly differentially expressed genes not included in 
 the enriched pathways, we find LDLR: Low-Density Lipoprotein Receptor. It is 
