@@ -186,8 +186,8 @@ if(! file.exists("./A3/a3_ranked.rnk")){
 
 ### Run GSEA
 
-Now that we have the ranked list and gene set ready, we can perform GSEA. Note
-that in order to run GSEA on R, we will be using the `fgsea` package. 
+Now that we have the ranked list and gene set ready, we can perform GSEA. In 
+order to run GSEA on R, we will be using the `fgsea` package. 
 ```{r eval=TRUE}
 run_gsea = TRUE # set to TRUE if running GSEA
 ```
