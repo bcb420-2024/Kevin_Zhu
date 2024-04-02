@@ -117,7 +117,8 @@ dataset we use for determining pathway enrichment in the GSEA analysis.
 
 ```{r results = "hide"}
 # Set gene-set file
-geneset_file <- "Human_GOBP_AllPathways_noPFOCR_no_GO_iea_March_01_2024_symbol.gmt" 
+geneset_file <- 
+  "./A3/Human_GOBP_AllPathways_noPFOCR_no_GO_iea_March_01_2024_symbol.gmt" 
 
 # Check if geneset does not exist, then download it
 if(! file.exists(geneset_file)){
