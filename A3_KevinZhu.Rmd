@@ -315,7 +315,25 @@ governing metabolism, with a notably inclusion of pathways that all seem to
 be involved in cholesterol metabolism This is unsurprising given what the 
 conclusions are from the original paper. Furthermore, each cluster seems to 
 only contain a single category (either the γ-secretase inhibition or control),
-which implies that the clusters fit with the model. 
+which implies that the clusters fit with the model. These annotatations were 
+used to produce the collapsed network, as seen below:
+
+![Figure 3. Collapsed enrichment map showing the clustered genesets](./A3/figs/network_collapsed.png)
+
+<br /> 
+Note that under `Group Preferences` in Cytoscape, the `Enable attribute aggegation`
+option had to be selected in order to display the nodes in the correct
+colors. Overall, the major themes present in this analysis are processes related
+to metabolism. Similar to what the original paper focused on, there are clusters
+related to cholesterol: "Sterol regulatory element binding" and "Superpathway
+cholesterol disorders". Furthermore, there seems to be an interesting cluster
+of pathways related to glycolytic processes; we will explore this in further
+discussions below. Finally, an interesting cluster is the "verapamil pathway". 
+Interestingly, verapamil is a highly efficacious phenylalkylamine Ca2+ channel
+blocker, which has shown to have some use in treating dementia 
+(Popović et al., 2020). Notably, this was not discussed in original paper, but 
+more work down the line could look into the relationship between γ-secretase 
+and its effects on Ca2+ homeostasis in cells.
 
 ## Interpretation and detailed view of results:
 
@@ -578,6 +596,10 @@ Merico, D., Isserlin, R., Stueker, O., Emili, A., & Bader, G. D. (2010).
 Enrichment map: A network-based method for gene-set enrichment visualization 
 and interpretation. PLoS ONE, 5(11). 
 https://doi.org/10.1371/journal.pone.0013984 
+
+Popović, N., Morales-Delgado, N., Vidal Mena, D., Alonso, A., Pascual Martínez, 
+M., Caballero Bleda, M., & Popović, M. (2020). Verapamil and alzheimer’s 
+disease: Past, present, and future. Frontiers in Pharmacology, 11. https://doi.org/10.3389/fphar.2020.00562 
 
 Robinson MD, McCarthy DJ and Smyth GK (2010). edgeR: a Bioconductor package for 
 differential expression analysis of digital gene expression data. 
