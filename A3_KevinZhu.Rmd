@@ -118,7 +118,7 @@ dataset we use for determining pathway enrichment in the GSEA analysis.
 ```{r results = "hide"}
 # Set gene-set file
 geneset_file <- 
-  "./A3/Human_GOBP_AllPathways_noPFOCR_no_GO_iea_March_01_2024_symbol.gmt" 
+  "./A3/Human_GOBP_AllPathways_noPFOCR_no_GO_iea_April_01_2024_symbol.gmt" 
 
 # Check if geneset does not exist, then download it
 if(! file.exists(geneset_file)){
@@ -127,51 +127,56 @@ if(! file.exists(geneset_file)){
   gmt_url = 
     "http://download.baderlab.org/EM_Genesets/current_release/Human/symbol/"
 
-  # Connect to URL and get html version of the page
+  # connect to URL and get html version of the page
   filenames = getURL(gmt_url)
   tc = textConnection(filenames)
   contents = readLines(tc)
   close(tc)
   
-  # Create regular expression that will match the relevant file on the html page
+  # create regular expression that will match the relevant file on the html page
   rx = gregexpr(
     "(?<=<a href=\")(.*.GOBP_AllPathways_noPFOCR_no_GO_iea.*.)(.gmt)(?=\">)", 
     contents,
     perl = TRUE)
   
-  # Get file names that match the regular expression
+  # get file names that match the regular expression
   gmt_file = unlist(regmatches(contents, rx))
   
-  # Specify path of where to download the file
+  # specify path of where to download the file
   geneset_file <- file.path(gmt_file)
   
-  # Download the file
+  # download the file
   download.file(paste(gmt_url, gmt_file, sep=""), destfile = geneset_file)
 }
 ```
-This step is OPTIONAL (it makes rendering this notebook much longer). If the 
-user has not run any of the previous notebooks, this code block should 
+
+The following step is OPTIONAL (it makes rendering this notebook much longer). 
+If the user has not run any of the previous notebooks, this code block should 
 create the files necessary to run everything properly. 
 ```{r results = "hide"}
 # ensures user does not need to manually run the previous notebook
-# rmarkdown::render("./A2_KevinZhu.Rmd")
+# check if both files from previous assignments exist
+if (!file.exists("./A1/GSE206102_normalized_filtered_RSEM_counts.txt") || 
+    !file.exists("./A2/top_outputs.txt")) {
+  # run previous notebook
+  rmarkdown::render("./A2_KevinZhu.Rmd")
+} 
 ```
 
 Next, we calculate the ranks of each differentially-expressed gene and order 
 them in descending order to create a ranked gene list.
-
 ```{r eval=TRUE}
-# Get results from differential expression analysis in Assignment 2
+# get results from differential expression analysis in Assignment 2
 top_outputs <- read.table(file = "./A2/top_outputs.txt", header = TRUE, sep = "\t")
 
-# Create ranked dataframe
+# create ranked dataframe
 ranked_list <- data.frame(GeneName = rownames(top_outputs), 
                           rank = -log(top_outputs$PValue, base = 10) * sign(top_outputs$logFC))
 
-# Ordered ranked dataframe in descending order by rank
+# ordered ranked dataframe in descending order by rank
 ranked_list <- ranked_list[order(-ranked_list$rank),]
 
-# Save ranked list
+# save ranked list
 if(! file.exists("./A3/a3_ranked.rnk")){
   write.table(ranked_list, "./A3/a3_ranked.rnk", 
               quote=FALSE, sep='\t', 
@@ -184,19 +189,19 @@ if(! file.exists("./A3/a3_ranked.rnk")){
 Now that we have the ranked list and gene set ready, we can perform GSEA. Note
 that in order to run GSEA on R, we will be using the `fgsea` package. 
 ```{r eval=TRUE}
-run_gsea = TRUE # Set to TRUE if running GSEA
+run_gsea = TRUE # set to TRUE if running GSEA
 ```
 
 ```{r eval=TRUE}
 if (run_gsea) {
   
-  # Read gene sets from GMT file
+  # read gene sets from GMT file
   genesets <- gmtPathways(geneset_file)
   
   rank_stats <- ranked_list$rank
   names(rank_stats) <- ranked_list$GeneName
   
-  # Run GSEA
+  # run GSEA
   fgseaRes <- fgsea(pathways = genesets, 
                     stats = rank_stats, 
                     minSize  = 15,
@@ -210,16 +215,15 @@ Note that the output from `fgsea` is different from the output we would expect
 from the original `GSEA` application. Thus, we must parse the output from 
 `fgsea` so that we have two files: one for the results with NES > 0 and one for 
 the results with NES < 0.
-
 ```{r eval=TRUE}
 format_fgsea_results <- function(current_fgsea_results, current_ranks) {
   # fgsea identifies the leading edge. 
-  # Extract the highest rank from the set to obtain the maximum rank
+  # extract the highest rank from the set to obtain the maximum rank
   calculated_rank_at_max <- apply(current_fgsea_results, 1, FUN = function(x){
     max(which(names(current_ranks) %in% unlist(x[8])))
     })
   
-  # Final column contains comma-separated list of genes in the leading edge
+  # final column contains comma-separated list of genes in the leading edge
   # GSEA technically will disregard this column 
   gsea_results <- cbind(current_fgsea_results$pathway,
                         current_fgsea_results$pathway,
@@ -235,7 +239,7 @@ format_fgsea_results <- function(current_fgsea_results, current_ranks) {
                           paste(unlist(x[8]), collapse = ",")
                           })
                         ) 
-  # Rename columns
+  # rename columns
   colnames(gsea_results) <- c("name", "description", "GS DETAILS", "SIZE", 
                                 "ES", "NES", "pval", "padj", "FWER", 
                                 "Rank at Max", "leading edge genes")
@@ -246,7 +250,7 @@ format_fgsea_results <- function(current_fgsea_results, current_ranks) {
 top_pathways_pos <- format_fgsea_results(fgseaRes[NES > 0], rank_stats)
 top_pathways_neg <- format_fgsea_results(fgseaRes[NES < 0], rank_stats)
 
-# Write tables as to file so we can use Cytoscape later
+# write tables as to file so we can use Cytoscape later
 write.table(top_pathways_pos, 
             file = "./A3/gsea_report_for_na_pos.tsv", sep = "\t", 
             row.names = FALSE,
@@ -267,6 +271,7 @@ Table 2: Top enriched pathways for non γ-secretase inhibition group
 ```{r echo=FALSE}
 fgseaRes[NES < 0][order(fgseaRes[NES > 0]$padj), ]
 ```
+
 In general, we see significant enrichment in pathways that govern metabolic 
 processes in the γ-secretase inhibition group, specifically in regards to 
 cholesterol biosynthesis. Interestingly, this matches closely to 
@@ -392,7 +397,7 @@ information. In this analysis, we will be exploring genes exhibiting
 significant differential expression yet lack pathway annotations.
 
 ```{r eval=TRUE}
-# Read in the gene set
+# read in the gene set
 capture.output(genesets <- GSA.read.gmt(geneset_file), file="./A3/gsa_load.out")
 names(genesets$genesets) <- genesets$geneset.names
 ```
@@ -403,60 +408,56 @@ In our context, significance will be delineated by an FDR threshold of below
 Initially, we will compile a roster of genes associated with the pathways 
 identified as enriched in our GSEA analysis. Additionally, we will retrieve the 
 complete list of genes.
-
 ```{r eval=TRUE}
 diff_expr_genes <- rownames(top_outputs[top_outputs$FDR < 0.1, ])
 
-# Get all genes in enriched pathways
+# get all genes in enriched pathways
 genes_enr_gs <- c()
 for(i in 1:length(fgseaRes)){ # For every pathway in the enriched pathways
   
-  # Get the genes that are in the pathway
+  # get the genes that are in the pathway
   current_geneset <- unlist(genesets$genesets[which(genesets$geneset.names %in% fgseaRes[i])])
   genes_enr_gs <- union(genes_enr_gs, current_geneset)
 }
 
-# Get list of unique genes in the entire gene set
+# get list of unique genes in the entire gene set
 all_genes_gs <- unique(unlist(genesets$genesets))
 ```
 
 From the acquired gene lists, we proceed to extract the significantly 
 differentially expressed genes that are absent from both of the gene lists 
 generated in the prior step.
-
 ```{r eval=TRUE}
-# Get set of significantly differentially expressed genes not included anywhere in the geneset
-no_annot <- setdiff(diff_expr_genes, all_genes_gs) 
-# Get set of significantly differentially expressed genes not included in the enriched pathways
-no_enr_annot <- setdiff(diff_expr_genes, fgseaRes)
+# get set of significantly differentially expressed genes not included anywhere in the geneset
+no_annot_geneset <- setdiff(diff_expr_genes, all_genes_gs) 
+# get set of significantly differentially expressed genes not included in the enriched pathways
+no_annot_enriched <- setdiff(diff_expr_genes, fgseaRes)
 ```
 
 Finally, we can produce the heatmaps for the dark matter genes.
-
 ```{r eval=TRUE}
-# Get expression data from A1
+# get expression data from A1
 expression <- read.table("./A1/GSE206102_normalized_filtered_RSEM_counts.txt", 
                          stringsAsFactors=FALSE)
 
-# Get indices of significantly differentially expressed genes 
-# not included anywhere in the geneset in the expression data
-no_annot_ind <- which(rownames(expression) %in% no_annot)
+# get indices of differentially expressed genes not included in geneset 
+no_annot_geneset_ind <- which(rownames(expression) %in% no_annot_geneset)
 
-# Scale the data
-no_annot_matrix <- t(
-  scale(t(as.matrix(expression[no_annot_ind,])))) 
+# scale the data
+no_annot_geneset_matrix <- t(
+  scale(t(as.matrix(expression[no_annot_geneset_ind,])))) 
 
-# Create the colorscales based on if there are negative scaled count values
-if(min(no_annot_matrix) < 0){
-  colscale <- colorRamp2(c(min(no_annot_matrix), 0, max(no_annot_matrix)),
+# create the colorscales based on if there are negative scaled count values
+if(min(no_annot_geneset_matrix) < 0){
+  colscale <- colorRamp2(c(min(no_annot_geneset_matrix), 0, max(no_annot_geneset_matrix)),
                            c("cornflowerblue", "white", "orange"))
 } else {
-  colscale <- colorRamp2(c(min(no_annot_matrix), max(no_annot_matrix)), 
+  colscale <- colorRamp2(c(min(no_annot_geneset_matrix), max(no_annot_geneset_matrix)), 
                            c("white", "orange"))
 }
 
-# Create heatmap
-Heatmap(no_annot_matrix,
+# create heatmap
+Heatmap(no_annot_geneset_matrix,
         cluster_rows = TRUE,
         cluster_columns = TRUE,
         show_row_dend=TRUE,
@@ -468,8 +469,8 @@ Heatmap(no_annot_matrix,
 ```
 
 ```{r eval=TRUE}
-# Set of significantly differentially expressed genes not included anywhere in the geneset
-no_annot
+# set of significantly differentially expressed genes not included anywhere in the geneset
+no_annot_geneset
 ```
 
 Despite using very few genes, this heatmap still seems to able to cluster the
@@ -488,25 +489,24 @@ potential impact of γ-secretase on pathways beyond cholesterol biosynthesis
 that are relevant to AD.
 
 ```{r eval=TRUE}
-# Get indices of significantly differentially expressed genes 
-# not included anywhere in the enriched gene lists in the expression data
-no_expr_annot_ind <- which(rownames(expression) %in% no_enr_annot)
+# get indices of differentially expressed genes not included in enriched gene lists
+no_annot_enriched_ind <- which(rownames(expression) %in% no_annot_enriched)
 
-# Scale the data
-no_expr_annot_matrix <- t(
-  scale(t(as.matrix(expression[no_expr_annot_ind, ])))) 
+# scale the data
+no_annot_enriched_matrix <- t(
+  scale(t(as.matrix(expression[no_annot_enriched_ind, ])))) 
 
-# Create the colorscales based on if there are negative scaled count values
-if(min(no_expr_annot_matrix) < 0){
-  colscale <- colorRamp2(c(min(no_expr_annot_matrix), 0, max(no_expr_annot_matrix)),
+#  create the colorscales based on if there are negative scaled count values
+if(min(no_annot_enriched_matrix) < 0){
+  colscale <- colorRamp2(c(min(no_annot_enriched_matrix), 0, max(no_annot_enriched_matrix)),
                            c("cornflowerblue", "white", "orange"))
 } else {
-  colscale <- colorRamp2(c(min(no_expr_annot_matrix), max(no_expr_annot_matrix)), 
+  colscale <- colorRamp2(c(min(no_annot_enriched_matrix), max(no_annot_enriched_matrix)), 
                            c("white", "orange"))
 }
 
-# Create heatmap
-Heatmap(no_expr_annot_matrix,
+# create heatmap
+Heatmap(no_annot_enriched_matrix,
         cluster_rows = TRUE,
         cluster_columns = TRUE,
         show_row_dend=TRUE,
@@ -517,8 +517,8 @@ Heatmap(no_expr_annot_matrix,
 ```
 
 ```{r eval=TRUE}
-# Set of significantly differentially expressed genes not included in the enriched pathways
-no_enr_annot
+# set of significantly differentially expressed genes not included in the enriched pathways
+no_annot_enriched
 ```
 
 Yet again, we can see in the heatmap above that the samples treated with 
