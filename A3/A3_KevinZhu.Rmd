@@ -444,12 +444,13 @@ no_annot
 ```
 
 Visinin-like 1 emerges from the short list of dark matter genes that are not 
-included anywhere in the geneset. Interestingly, it is a known peripheral 
-biomarker for Alzheimer's disease (AD). It is worth noting that the non-control 
-cells exclusively underwent treatment with γ-secretase inhibitors. Thus, the 
-presence of VSNL1 in the list of highly differentially expressed genes 
-underscores the potential impact of γ-secretase on pathways beyond cholesterol 
-biosynthesis that are relevant to AD.
+included anywhere in the geneset. Interestingly, it is a neuronal calcium-sensor 
+protein, but is also known as a peripheral biomarker for Alzheimer's disease 
+(Halbgebauer et al., 2022). It is worth noting that the non-control cells 
+exclusively underwent treatment with γ-secretase inhibitors. Thus, the presence 
+of VSNL1 in the list of highly differentially expressed genes underscores the 
+potential impact of γ-secretase on pathways beyond cholesterol biosynthesis 
+that are relevant to AD.
 
 ```{r eval=TRUE}
 # Get indices of significantly differentially expressed genes 
@@ -490,7 +491,7 @@ the enriched pathways, we find LDLR: Low-Density Lipoprotein Receptor. It is
 traditionally recognized for its role in regulating cholesterol 
 metabolism but is garnering attention in Alzheimer's disease (AD) research. Its 
 involvement may extend beyond lipid regulation, potentially influencing amyloid 
-beta (Aβ) metabolism and neuronal function.
+beta (Aβ) metabolism and neuronal function (Kim et al., 2009).
 
 ## References
 \setlength{\parindent}{-0.2in}
@@ -506,10 +507,19 @@ version 2.0.3, https://github.com/tidyverse/magrittr,
 Davis, S. and Meltzer, P. S. GEOquery: a bridge between the Gene Expression 
 Omnibus (GEO) and BioConductor. Bioinformatics, 2007, 14, 1846-1847
 
+Efron B, Tibshirani R (2022). _GSA: Gene Set Analysis_. R package version 
+1.03.2, <http://www-stat.stanford.edu/~tibs/GSA>.
+
 Essayan-Perez, Sofia, and Thomas C Südhof. “Neuronal γ-Secretase Regulates 
 Lipid Metabolism, Linking Cholesterol to Synaptic Dysfunction in Alzheimer’s 
 Disease.” Neuron, vol. 111, no. 20, 1 Oct. 2023, pp. 3176-3194.e7, 
 https://doi.org/10.1016/j.neuron.2023.07.005.
+
+Halbgebauer, S., Steinacker, P., Riedel, D., Oeckl, P., Anderl-Straub, 
+S., Lombardi, J., von Arnim, C. A., Nagl, M., Giese, A., Ludolph, A. C., & 
+Otto, M. (2022). Visinin-like protein 1 levels in blood and CSF as emerging 
+markers for alzheimer’s and other Neurodegenerative Diseases. Alzheimer’s 
+Research &amp; Therapy, 14(1). https://doi.org/10.1186/s13195-022-01122-4 
 
 Gu Z, Eils R, Schlesner M (2016). “Complex heatmaps reveal patterns and 
 correlations in multidimensional genomic data.” Bioinformatics. 
@@ -520,6 +530,11 @@ Gu Z (2022). “Complex Heatmap Visualization.” iMeta. doi:10.1002/imt2.43.
 Gu Z, Gu L, Eils R, Schlesner M, Brors B (2014). “circlize implements and 
 enhances circular visualization in R.” Bioinformatics, 30, 2811-2812.
 
+Kim, J., Castellano, J. M., Jiang, H., Basak, J. M., Parsadanian, M., Pham, 
+V., Mason, S. M., Paul, S. M., & Holtzman, D. M. (2009). Overexpression of 
+low-density lipoprotein receptor in the brain markedly inhibits amyloid 
+deposition and increases extracellular AΒ clearance. Neuron, 64(5), 632–644. https://doi.org/10.1016/j.neuron.2009.11.013 
+
 Kim, Y., Kim, C., Jang, H. Y., & Mook-Jung, I. (2016). Inhibition of 
 cholesterol biosynthesis reduces γ-secretase activity and amyloid-β generation. 
 Journal of Alzheimer’s Disease, 51(4), 1057–1068. 
@@ -529,6 +544,9 @@ Kolberg L, Raudvere U, Kuzmin I, Vilo J, Peterson H (2020). “gprofiler2– an
 R package for gene list functional enrichment analysis and namespace conversion 
 toolset g:Profiler.” F1000Research, 9 (ELIXIR)(709). R package version 0.2.3.
 
+Korotkevich G., Sukhov V., Sergushichev A. Fast gene set enrichment analysis. 
+bioRxiv (2019), doi:10.1101/060012
+
 Martin, Fergal J., et al. “Ensembl 2023.” Nucleic Acids Research, 
 vol. 51, no. D1, 6 Jan. 2023, pp. D933–D941, pubmed.ncbi.nlm.nih.gov/36318249/, 
 https://doi.org/10.1093/nar/gkac958.
@@ -537,8 +555,20 @@ Robinson MD, McCarthy DJ and Smyth GK (2010). edgeR: a Bioconductor package for
 differential expression analysis of digital gene expression data. 
 Bioinformatics 26, 139-140
 
+Santangelo, R., Giuffrida, M. L., Satriano, C., Tomasello, M. F., Zimbone, S., 
+& Copani, A. (2021). Β-amyloid monomers drive up neuronal aerobic glycolysis 
+in response to energy stressors. Aging, 13(14), 18033–18050. 
+https://doi.org/10.18632/aging.203330 
+
+Temple Lang D (2023). 
+_RCurl: General Network (HTTP/FTP/...) Client Interface for R_. R package 
+version 1.98-1.13, <https://CRAN.R-project.org/package=RCurl>.
+
 Wickham H (2016). ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag 
 New York. ISBN 978-3-319-24277-4, https://ggplot2.tidyverse.org.
+
+Wickham H (2023). _httr: Tools for Working with URLs and HTTP_. R package 
+version 1.4.7, <https://CRAN.R-project.org/package=httr>.
   
 Wickham H, Henry L (2023). _purrr: Functional Programming Tools_. R package 
 version 1.0.2, https://github.com/tidyverse/purrr, 
@@ -554,5 +584,6 @@ Hall/CRC. ISBN 978-1498716963
 Mapping identifiers for the integration of genomic datasets with the 
 R/Bioconductor package biomaRt. Steffen Durinck, Paul T. Spellman, Ewan Birney 
 and Wolfgang Huber, Nature Protocols 4, 1184-1191 (2009).
+
 </div>
 
