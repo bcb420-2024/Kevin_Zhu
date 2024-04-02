@@ -110,9 +110,9 @@ The first step for this assignment is to perform non-thresholded gene set
 enrichment analysis
 
 ### Downloading the Gene Set
-We must first obtain the Bader gene set before we can begin our analysis if it 
-has not been already downloaded. This will be the dataset we use for determining
-pathway enrichment in the GSEA analysi. 
+We must first obtain the Bader gene set (Merico et al., 2010) before we can
+begin our analysis if it has not been already downloaded. This will be the 
+dataset we use for determining pathway enrichment in the GSEA analysis. 
 
 
 ```{r results = "hide"}
@@ -145,13 +145,20 @@ if(! file.exists(geneset_file)){
   download.file(paste(gmt_url, gmt_file, sep=""), destfile = geneset_file)
 }
 ```
+This step is OPTIONAL (it makes rendering this notebook much longer). If the 
+user has not run any of the previous notebooks, this code block should 
+create the files necessary to run everything properly. 
+```{r results = "hide"}
+# ensures user does not need to manually run the previous notebook
+rmarkdown::render("./A2_KevinZhu.Rmd")
+```
 
 Next, we calculate the ranks of each differentially-expressed gene and order 
 them in descending order to create a ranked gene list.
 
 ```{r eval=TRUE}
 # Get results from differential expression analysis in Assignment 2
-de_df <- read.table(file = "top_outputs.txt", header = TRUE, sep = "\t")
+de_df <- read.table(file = "./A2/top_outputs.txt", header = TRUE, sep = "\t")
 
 # Create ranked dataframe
 ranked_list <- data.frame(GeneName = rownames(de_df), 
@@ -161,8 +168,10 @@ ranked_list <- data.frame(GeneName = rownames(de_df),
 ranked_list <- ranked_list[order(-ranked_list$rank),]
 
 # Save ranked list
-if(! file.exists("a3_ranked.rnk")){
-  write.table(ranked_list, "a3_ranked.rnk", quote=FALSE, sep='\t', row.names = FALSE)
+if(! file.exists("./A3/a3_ranked.rnk")){
+  write.table(ranked_list, "./A3/a3_ranked.rnk", 
+              quote=FALSE, sep='\t', 
+              row.names = FALSE)
 }
 ```
 
@@ -188,7 +197,7 @@ if (run_gsea) {
                     stats = rank_stats, 
                     minSize  = 15,
                     maxSize  = 200,
-                    nperm = 10000)
+                    nperm = 1000)
   
 }
 
@@ -236,12 +245,12 @@ top_pathways_pos <- format_fgsea_results(fgseaRes[NES > 0], rank_stats)
 top_pathways_neg <- format_fgsea_results(fgseaRes[NES < 0], rank_stats)
 
 write.table(top_pathways_pos, 
-            file = "gsea_report_for_na_pos.tsv", sep = "\t", 
+            file = "./A3/gsea_report_for_na_pos.tsv", sep = "\t", 
             row.names = FALSE,
             quote = FALSE)
 
 write.table(top_pathways_neg, 
-            file = "gsea_report_for_na_neg.tsv", sep = "\t", 
+            file = "./A3/gsea_report_for_na_neg.tsv", sep = "\t", 
             row.names = FALSE,
             quote = FALSE)
 
@@ -280,7 +289,7 @@ The resulting map has 204 nodes and 3865 edges. The node cutoff used for this
 network is FDR Q-value of 0.01, while the edge similarity cutoff was set to
 0.375. Below showcases the map without manual layout manipulation.
 
-![Figure 1. Enrichment map showing γ-secretase inhibition vs. control with threshold FDR at 0.005](./figs/network_prelayout.png)
+![Figure 1. Enrichment map showing γ-secretase inhibition vs. control with threshold FDR at 0.005](./A3/figs/network_prelayout.png)
 
 
 <br /> 
@@ -294,7 +303,7 @@ pathways and its weight represents the number in common.
 After this step, we can annotate our network to visualize the pathways that 
 cluster together following this analysis. 
 
-![Figure 2. Annotated enrichment map showing the clustered genesets](./figs/grouped_network.png)
+![Figure 2. Annotated enrichment map showing the clustered genesets](./A3/figs/grouped_network.png)
 
 
 <br /> 
@@ -363,7 +372,7 @@ significant differential expression yet lack pathway annotations.
 
 ```{r eval=TRUE}
 # Read in the gene set
-capture.output(genesets <- GSA.read.gmt(geneset_file), file="gsa_load.out")
+capture.output(genesets <- GSA.read.gmt(geneset_file), file="./A3/gsa_load.out")
 names(genesets$genesets) <- genesets$geneset.names
 ```
 
@@ -404,13 +413,12 @@ no_enr_annot <- setdiff(diff_expr_genes, fgseaRes)
 Finally, we can produce the heatmaps for the dark matter genes.
 
 ```{r eval=TRUE}
-# Get expression data 
-expression <- read.table("GSE206102_normalized_filtered_RSEM_counts.txt", 
+# Get expression data from A1
+expression <- read.table("./A1/GSE206102_normalized_filtered_RSEM_counts.txt", 
                          stringsAsFactors=FALSE)
 
 # Get indices of significantly differentially expressed genes 
 # not included anywhere in the geneset in the expression data
-# no_annot_ind <- which(expression$Gene %in% no_annot) 
 no_annot_ind <- which(rownames(expression) %in% no_annot)
 
 # Scale the data
@@ -550,6 +558,11 @@ bioRxiv (2019), doi:10.1101/060012
 Martin, Fergal J., et al. “Ensembl 2023.” Nucleic Acids Research, 
 vol. 51, no. D1, 6 Jan. 2023, pp. D933–D941, pubmed.ncbi.nlm.nih.gov/36318249/, 
 https://doi.org/10.1093/nar/gkac958.
+
+Merico, D., Isserlin, R., Stueker, O., Emili, A., & Bader, G. D. (2010). 
+Enrichment map: A network-based method for gene-set enrichment visualization 
+and interpretation. PLoS ONE, 5(11). 
+https://doi.org/10.1371/journal.pone.0013984 
 
 Robinson MD, McCarthy DJ and Smyth GK (2010). edgeR: a Bioconductor package for 
 differential expression analysis of digital gene expression data. 

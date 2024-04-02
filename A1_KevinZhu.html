@@ -1991,6 +1991,7 @@ samples_type &lt;- samples_type[to_keep, ]
 write.table(samples_type, 
             file.path(
               getwd(),
+              &quot;A1&quot;,
               paste(dataset_geo_id, 
                     &quot;samples_type.txt&quot;,sep=&quot;_&quot;)
               ),
@@ -2250,6 +2251,7 @@ line.</p>
 <pre class="r"><code>write.table(normalized_counts, 
             file.path(
               getwd(),
+              &quot;A1&quot;,
               paste(dataset_geo_id, 
                     &quot;normalized_filtered_RSEM_counts.txt&quot;,sep=&quot;_&quot;)
               ),

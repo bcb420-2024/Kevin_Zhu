@@ -1726,7 +1726,7 @@ expression analysis.</p>
 <p>We must load in the normalized data that was saved from the previous
 assignment.</p>
 <pre class="r"><code># ensures user does not need to manually run the previous notebook
-rmarkdown::render(&quot;../A1/A1_KevinZhu.Rmd&quot;)</code></pre>
+rmarkdown::render(&quot;./A1_KevinZhu.Rmd&quot;)</code></pre>
 <pre><code>## 
 ## 
 ## processing file: A1_KevinZhu.Rmd</code></pre>
@@ -1734,14 +1734,14 @@ rmarkdown::render(&quot;../A1/A1_KevinZhu.Rmd&quot;)</code></pre>
 <pre><code>## 
 ## Output created: A1_KevinZhu.html</code></pre>
 <pre class="r"><code># read the file containing information about sample types 
-samples_type &lt;- read.table(file=file.path(&quot;../A1/GSE206102_samples_type.txt&quot;),
+samples_type &lt;- read.table(file=file.path(&quot;./A1/GSE206102_samples_type.txt&quot;),
                                     header = TRUE,sep = &quot;\t&quot;,
                                     stringsAsFactors = FALSE,
                                     check.names=FALSE)
 
 # read the file containing normalized and filtered counts 
 normalized_counts &lt;- read.table(file=file.path(
-  &quot;../A1/GSE206102_normalized_filtered_RSEM_counts.txt&quot;
+  &quot;./A1/GSE206102_normalized_filtered_RSEM_counts.txt&quot;
   ),
                                     header = TRUE,sep = &quot;\t&quot;,
                                     stringsAsFactors = FALSE,
@@ -1760,9 +1760,8 @@ other.</p>
 # plot multidimensional scaling (MDS) plot
 plotMDS(d, labels=NULL, pch = 1, 
         col = c(&quot;cyan&quot;, &quot;red&quot;, &quot;darkgreen&quot;)[
-          factor(samples_type$treatment)])  
-
-# add legend and title to the plot
+          factor(samples_type$treatment)])  </code></pre>
+<pre class="r"><code># add legend and title to the plot
 title(main = &quot;MDS Plot by treatment&quot;)
 legend(&quot;topright&quot;, 
        legend = levels(factor(samples_type$treatment)),
@@ -1785,9 +1784,8 @@ d &lt;- DGEList(counts=as.matrix(normalized_counts),
 # plot multidimensional scaling (MDS) plot
 plotMDS(d, labels=NULL, pch = 1, 
         col = c(&quot;cyan&quot;, &quot;red&quot;, &quot;darkgreen&quot;, &quot;black&quot;, &quot;violet&quot;, &quot;blue&quot;)[
-          factor(samples_type$replicate_number)])  
-
-# add legend and title to the plot
+          factor(samples_type$replicate_number)])  </code></pre>
+<pre class="r"><code># add legend and title to the plot
 title(main = &quot;MDS Plot by replicate&quot;)
 legend(&quot;bottomright&quot;, 
        legend = levels(factor(samples_type$replicate_number)),
@@ -1879,6 +1877,11 @@ top_outputs$diffexpressed &lt;-
          ifelse(top_outputs$logFC &lt; -0.25 &amp; top_outputs$FDR &lt; 0.1, 
                 &quot;Downregulated&quot;, 
                 &quot;No change&quot;))
+
+write.table(top_outputs, 
+            file = file.path(getwd(), &quot;A2&quot;, &quot;top_outputs.txt&quot;), 
+            sep = &quot;\t&quot;, row.names = TRUE)
+
 
 # define colors based on differential expression status
 cols &lt;- ifelse(top_outputs$logFC &gt; 0.25 &amp; top_outputs$FDR &lt; 0.1, 

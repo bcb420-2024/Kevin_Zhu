@@ -36,7 +36,7 @@ genes.
 <br>
 These dependencies has are already included with the command in the docker file.
 
-```{r setup, message=FALSE}
+```{r, message=FALSE}
 
 if (!requireNamespace("BiocManager", quietly = TRUE)){
   install.packages("BiocManager")}
@@ -82,19 +82,19 @@ assignment.
 
 ```{r results = "hide"}
 # ensures user does not need to manually run the previous notebook
-rmarkdown::render("../A1/A1_KevinZhu.Rmd")
+rmarkdown::render("./A1_KevinZhu.Rmd")
 ```
 
 ```{r eval=TRUE}
 # read the file containing information about sample types 
-samples_type <- read.table(file=file.path("../A1/GSE206102_samples_type.txt"),
+samples_type <- read.table(file=file.path("./A1/GSE206102_samples_type.txt"),
                                     header = TRUE,sep = "\t",
                                     stringsAsFactors = FALSE,
                                     check.names=FALSE)
 
 # read the file containing normalized and filtered counts 
 normalized_counts <- read.table(file=file.path(
-  "../A1/GSE206102_normalized_filtered_RSEM_counts.txt"
+  "./A1/GSE206102_normalized_filtered_RSEM_counts.txt"
   ),
                                     header = TRUE,sep = "\t",
                                     stringsAsFactors = FALSE,
@@ -255,6 +255,11 @@ top_outputs$diffexpressed <-
          ifelse(top_outputs$logFC < -0.25 & top_outputs$FDR < 0.1, 
                 "Downregulated", 
                 "No change"))
+
+write.table(top_outputs, 
+            file = file.path(getwd(), "A2", "top_outputs.txt"), 
+            sep = "\t", row.names = TRUE)
+
 
 # define colors based on differential expression status
 cols <- ifelse(top_outputs$logFC > 0.25 & top_outputs$FDR < 0.1, 
@@ -450,7 +455,7 @@ affected by the DAPT or LY411575 treatment were those involved in the
 biosynthesis of cholesterol and precursors. 
 
 
-![Figure 4E and 4G from the paper "Neuronal γ-secretase regulates lipid metabolism, linking cholesterol to synaptic dysfunction in Alzheimer’s disease" (Essayan-Perez & Südhof 2024).](4E_G.jpg)
+![Figure 4E and 4G from the paper "Neuronal γ-secretase regulates lipid metabolism, linking cholesterol to synaptic dysfunction in Alzheimer’s disease" (Essayan-Perez & Südhof 2024).](./A2/4E_G.jpg)
 
 <br /> 
 Furthermore, the down-regulated genes were also described as being relatively 
